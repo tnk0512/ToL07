@@ -7,7 +7,7 @@ app = Flask(__name__)
 
 class TreeOfLife:
     # Load the TreeOfLife data
-    with open('static/data/tree_of_lives_withValue.json') as f:
+    with open('static/data/simple_withValue.json') as f:
         ToL_data = json.load(f)
 
     def __init__(self):
@@ -55,7 +55,7 @@ class TreeOfLife:
 # リーフノードのchildrenを変換する関数
 def convert_leaf_nodes(node, leaf_nodes):
     if node["n"] in leaf_nodes:
-        print(node["n"])
+        #print(node["n"])
         subtree, _ = ToL.subtree(n=node["n"], depth=1)  # 返り値はタプル
         node["children"] = subtree["children"]
     elif "children" in node:
@@ -71,7 +71,7 @@ def index():
 
 @app.route('/data', methods=['POST'])
 def get_subtree():
-    name = 'Biota'
+    name = '1' # ここを変える！！
     depth = 4
     subtree, leaf_nodes = ToL.subtree(name=name, depth=depth)
     return jsonify({"life": subtree, "leaf_nodes": leaf_nodes})
@@ -93,11 +93,23 @@ def get_subtree_on_click():
     
     # 新しいJSONデータを作成
     newtree = convert_leaf_nodes(pretree, leaf_nodes)
+    #print(newtree)
 
     parent = ToL.life(n=clicknode['parent']) if clicknode['parent'] != -1 else None
     return jsonify({"newtree": newtree, "parent": parent})
 
+@app.route('/parentclick', methods=['POST'])
+def parentclick():
+    data = request.get_json()
+    name = data['name']
 
+    # 親ノードのツリーを深さ4まで取得
+    newtree, _ = ToL.subtree(name=name, depth=4)
+
+    # 親ノードを取得
+    parent = ToL.life(name=name)
+
+    return jsonify({"newtree": newtree, "parent": parent})
 
 if __name__ == '__main__':
     app.run(debug=True)

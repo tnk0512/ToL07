@@ -33,6 +33,7 @@
     <div class="tooltip" style="opacity: 0;"></div>
     <div id="nodeCount">Nodes displayed: 0</div>
     <div id="overview" style="position: absolute; top: 10px; right: 10px; width: 250px; height: 250px; border: 1px solid #ccc;"></div>
+    <div id="pathDisplay">クリックノードのルートからのパス: </div> <!-- 追加：ルートノードからのパスを表示するdiv要素 -->
     <script>
         // Set up D3 layout and arc
     var width = 900,
@@ -43,11 +44,9 @@
         overheight = 250,
         overmaxradius = Math.min(overwidth, overheight) / 2;
     
-    var x = d3.scale.linear()
-        .range([0, 2 * Math.PI]);
+    var x = d3.scale.linear().range([0, 2 * Math.PI]);
     
-    var y = d3.scale.linear()
-        .range([0, maxradius]);
+    var y = d3.scale.linear().range([0, maxradius]);
     
     var partition = d3.layout.partition()
         .value(function(d) { return d.value; })  // Use the value attribute from the JSON data
@@ -104,6 +103,7 @@
     
         var overviewX = d3.scale.linear().range([0, 2 * Math.PI]);
         var overviewY = d3.scale.linear().range([0, overmaxradius * 5 / (maxdepth+1)]);
+
     
         var overviewArc = d3.svg.arc()
             .startAngle(function(d) { return Math.PI/2 - Math.max(0, Math.min(2 * Math.PI, overviewX(d.x))); })
@@ -173,6 +173,8 @@
     
         updateNodeCount(nodes);
     }
+
+    var previousTopNode = null;
     var previousClickDepth = 0;
     var pathList = [];
     var previousStartAngle = 0; // 追加：前回の開始角度
@@ -185,6 +187,340 @@
         return LabToHex(L, a, b);
     }
 
+    /*
+    function click(d) {
+    var startAngle = x(d.x);
+    var endAngle = x(d.x + d.dx);
+    //let initialColor = d3.select(this).style("fill");
+    var clickedNodeParent = d.parent;
+    console.log("Clicked Node", d.name);
+
+    // クリックノードの真のルートノードからの深さを再帰的に求める
+    function getNodeDepth(node, previousDepth) {
+        if (d.depth === 0 && previousTopNode) {
+            return previousDepth - 1;
+        }
+        if (!node.parent) {
+            return previousDepth - 1;
+        }
+        return getNodeDepth(node.parent, previousDepth + 1);
+    }
+
+    var nodeDepth = getNodeDepth(d, previousClickDepth);
+
+    // 現在の深さを保存して次回のクリック時に使用
+    previousClickDepth = nodeDepth;
+
+    if (d.depth === 0 && previousTopNode) {
+        pathList.pop();
+    } else {
+        // クリックノードの祖先ノードを含む配列を作成
+        pathList = getAncestors(d, pathList);
+    }
+    updatePathDisplay(); // パスを更新して画面に表示
+
+    if (d.depth === 0 && previousTopNode) {
+        fetch('/parentclick', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name: d.name })
+        })
+        .then(response => response.json())
+        .then(data => {
+            var subtree = data.newtree;
+            var parentNode = data.parent;
+
+            svg.selectAll("path").remove();
+            svg.selectAll("text").remove(); // ラベルをクリア
+
+            var nodes = partition.nodes(subtree).filter(function(d) {
+                return d.depth > 0;
+            });
+            x = d3.scale.linear().range([0, 2 * Math.PI]);
+
+
+            var path = svg.selectAll("path").data(nodes).enter().append("path")
+                .attr("d", arc)
+                .style("fill", fillColor)
+                .on("mouseover", mouseover)
+                .on("mouseout", mouseout);
+
+            // Ensure the parent node is clickable
+            var clickablePaths = path.filter(function(d) {
+                var r = y(d.y + d.dy / 2);
+                var theta = x(d.x + d.dx) - x(d.x);
+                return r * theta >= sizeCriterion || d === clickedNodeParent; // クリックノードの親ノードはrが負の値のため
+            });
+
+            clickablePaths.on("click", click)
+                .on("mouseover", mouseover)
+                .on("mouseout", mouseout);
+
+            let previousNode = nodes.find(n => n.name === previousTopNode.name);
+            if (previousNode) {
+                let n_x = previousNode.x;
+                let n_dx = previousNode.dx;
+                // Overview の設定
+                var overstartAngle = (previousStartAngle*(n_x+n_dx) - previousEndAngle*n_x)/n_dx;
+                var overendAngle = (previousStartAngle*(n_x+n_dx-1)-previousEndAngle*(n_x-1))/n_dx;
+
+            previousStartAngle = overstartAngle; // 追加：前回の開始角度を保存
+            previousEndAngle = overendAngle; // 追加：前回の終了角度を保存
+            overviewX = d3.scale.linear().range([overstartAngle, overendAngle]);
+            overviewY = d3.scale.linear().range([
+                overmaxradius * nodeDepth / maxdepth,
+                overmaxradius * (nodeDepth + 4 < maxdepth ? nodeDepth + 4 : maxdepth) / maxdepth
+            ]);
+
+            var overviewArc = d3.svg.arc()
+                .startAngle(function(d) { return Math.PI/2 - Math.max(0, Math.min(2 * Math.PI, overviewX(d.x))); })
+                .endAngle(function(d) { return Math.PI/2 - Math.max(0, Math.min(2 * Math.PI, overviewX(d.x + d.dx))); })
+                .innerRadius(function(d) { return Math.max(0, overviewY(d.y)); })
+                .outerRadius(function(d) { return Math.max(0, overviewY(d.y + d.dy)); });
+
+            var overviewSvg = d3.select("#overviewContainer").select("svg").select("g");
+
+            overviewSvg.selectAll("path").remove();
+
+            overviewSvg.selectAll("path")
+                .data(nodes)
+                .enter().append("path")
+                .attr("d", overviewArc)
+                .style("fill", function(d) {
+                    d.overviewColor = fillColor(d); // Save the original color
+                    return d.overviewColor;
+                })
+                .on("click", click);
+
+            svg.transition()
+                .duration(1000)
+                .tween("scale", function() {
+                    let targetDepth = Math.min(d.y + 5 * d.dy, 1);
+                    let //xd = d3.interpolate(x.domain(), [d.x, d.x + d.dx]),
+                        xd = d3.interpolate([n_x, n_x + n_dx], [0, 1]),
+                        yd = d3.interpolate(y.domain(), [d.y, 1]),
+                        yr = d3.interpolate(y.range(), [d.y ? 20 : 0, maxradius]);
+                    return function(t) {
+                        //let adjustedT = t < 0.4 ? 2.5 * t : 1;
+                        x.domain(xd(t));
+                        y.domain(yd(t)).range(yr(t));
+                    };
+                })
+                .selectAll("path").attrTween("d", function(d) { return function() { return arc(d); }; })
+                .styleTween("fill", function(d) {
+                    let initialColor = d3.select(this).style("fill");
+                    //let targetColor = fillColor(d);
+                    return function(t) {
+                        return d3.interpolateLab(initialColor, fillColor(d))(t);
+                    };
+                })
+                .each("end", function(e, i) {
+                    if (i === 0) {
+                        updateNodeCount(nodes);
+                        // Show the new labels after the transition ends
+                        svg.selectAll("text").remove(); // Clear any remaining labels
+                        var text = svg.selectAll("text")
+                            .data(nodes.filter(function(d) {
+                                var r = y(d.y + d.dy / 2); // Average radius of the arc
+                                var theta = x(d.x + d.dx) - x(d.x); // Angle in radians
+                                return r * theta >= labelCriterion;
+                            }))
+                            .enter().append("text")
+                            .attr("transform", function(d) {
+                                return "translate(" + arc.centroid(d) + ")";
+                            })
+                            .attr("text-anchor", "middle")
+                            .attr("font-size", "10px")
+                            .text(function(d) {
+                                return d.name;
+                            })
+                            .style("visibility", function(d) {
+                                return isNodeVisible(d, x.domain(), y.domain()) ? "visible" : "hidden";
+                            });
+                    }
+                });
+            previousTopNode = d;}
+
+            if (parentNode) {
+                parentNode.depth = 0;
+                parentNode.x = 0;
+                parentNode.dx = 1;
+                parentNode.y = 0;
+                parentNode.dy = 1;
+                var parentY = d3.scale.linear().range([0, 20]);
+
+                var parentPath = svg.append("path")
+                    .datum(parentNode)
+                    .attr("d", function(d) {
+                        var arcParent = d3.svg.arc()
+                            .startAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))); })
+                            .endAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))); })
+                            .innerRadius(function(d) { return Math.max(0, parentY(d.y)); })
+                            .outerRadius(function(d) { return Math.max(0, parentY(d.y + d.dy)); });
+                        return arcParent(d);
+                    })
+                    .style("fill", "#fff")
+                    .style("opacity", 1) // 親ノードは不透明
+                    .on("click", click)
+                    .on("mouseover", mouseover)
+                    .on("mouseout", mouseout);
+            }
+
+            updateNodeCount(nodes);
+        });
+    } else {
+        fetch('/subtree', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name: d.name })
+        })
+        .then(response => response.json())
+        .then(data => {
+            var subtree = data.newtree;
+            var parentNode = data.parent;
+            console.log("newtree", subtree);
+
+            svg.selectAll("path").remove();
+            svg.selectAll("text").remove(); // ラベルをクリア
+
+            //var nodes = partition.nodes(subtree);
+            
+            var nodes = partition.nodes(subtree).filter(function(d) {
+                return d.depth > 0;
+            });
+            x.domain([0, 1]);
+            //x.range([0, 2 * Math.PI]);
+
+            var path = svg.selectAll("path").data(nodes).enter().append("path")
+                .attr("d", arc)
+                .style("fill", fillColor)
+                .on("mouseover", mouseover)
+                .on("mouseout", mouseout);
+
+            // Ensure the parent node is clickable
+            var clickablePaths = path.filter(function(d) {
+                var r = y(d.y + d.dy / 2);
+                var theta = x(d.x + d.dx) - x(d.x);
+                return r * theta >= sizeCriterion || d === clickedNodeParent; // クリックノードの親ノードはrが負の値のため
+            });
+
+            clickablePaths.on("click", click)
+                .on("mouseover", mouseover)
+                .on("mouseout", mouseout);
+
+            var overstartAngle = previousStartAngle + (previousEndAngle - previousStartAngle) * d.x;
+            var overendAngle = previousStartAngle + (previousEndAngle - previousStartAngle) * (d.x + d.dx);
+
+            previousStartAngle = overstartAngle; // 追加：前回の開始角度を保存
+            previousEndAngle = overendAngle; // 追加：前回の終了角度を保存
+            overviewX = d3.scale.linear().range([overstartAngle, overendAngle]);
+            overviewY = d3.scale.linear().range([
+                overmaxradius * nodeDepth / maxdepth,
+                overmaxradius * (nodeDepth + 4 < maxdepth ? nodeDepth + 4 : maxdepth) / maxdepth
+            ]);
+
+            var overviewArc = d3.svg.arc()
+                .startAngle(function(d) { return Math.PI/2 - Math.max(0, Math.min(2 * Math.PI, overviewX(d.x))); })
+                .endAngle(function(d) { return Math.PI/2 - Math.max(0, Math.min(2 * Math.PI, overviewX(d.x + d.dx))); })
+                .innerRadius(function(d) { return Math.max(0, overviewY(d.y)); })
+                .outerRadius(function(d) { return Math.max(0, overviewY(d.y + d.dy)); });
+
+            var overviewSvg = d3.select("#overviewContainer").select("svg").select("g");
+
+            overviewSvg.selectAll("path").remove();
+
+            overviewSvg.selectAll("path")
+                .data(nodes)
+                .enter().append("path")
+                .attr("d", overviewArc)
+                .style("fill", function(d) {
+                    d.overviewColor = fillColor(d); // Save the original color
+                    return d.overviewColor;
+                })
+                .on("click", click);
+
+            previousTopNode = d;
+            console.log(d.name,"のd.x:", d.x);
+            console.log(d.name, "のd.dx:", d.dx);
+
+            svg.transition()
+            .delay(2000)
+            .duration(1000).tween("scale", function() {
+                let xd = d3.interpolate(x.domain(), [d.x, d.x + d.dx]),
+                    yd = d3.interpolate(y.domain(), [d.y, 1]),
+                    yr = d3.interpolate(y.range(), [d.y ? 60 : 0, maxradius]);
+                return function(t) {
+                    x.domain(xd(t));
+                    y.domain(yd(t)).range(yr(t));
+                };
+            }).selectAll("path").attrTween("d", function(d) { return function() { return arc(d); }; })
+            .styleTween("fill", function(d) {
+                let initialColor = d3.select(this).style("fill");
+                return function(t) {
+                    return d3.interpolateLab(initialColor, fillColor(d))(t);
+                };
+            }).each("end", function(e, i) {
+                if (i === 0) {
+                    updateNodeCount(nodes);
+                    // Show the new labels after the transition ends
+                    svg.selectAll("text").remove(); // Clear any remaining labels
+                    var text = svg.selectAll("text")
+                        .data(nodes.filter(function(d) {
+                            var r = y(d.y + d.dy / 2);
+                            var theta = x(d.x + d.dx) - x(d.x);
+                            return r * theta >= labelCriterion;
+                        }))
+                        .enter().append("text")
+                        .attr("transform", function(d) {
+                            return "translate(" + arc.centroid(d) + ")";
+                        })
+                        .attr("text-anchor", "middle")
+                        .attr("font-size", "10px")
+                        .text(function(d) {
+                            return d.name;
+                        })
+                        .style("visibility", function(d) {
+                            return isNodeVisible(d, x.domain(), y.domain()) ? "visible" : "hidden";
+                        });
+                }
+            });
+            
+            if (parentNode) {
+                parentNode.depth = 0;
+                parentNode.x = 0;
+                parentNode.dx = 1;
+                parentNode.y = 0;
+                parentNode.dy = 1;
+                var parentY = d3.scale.linear().range([0, 20]);
+
+                var parentPath = svg.append("path")
+                    .datum(parentNode)
+                    .attr("d", function(d) {
+                        var arcParent = d3.svg.arc()
+                            .startAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))); })
+                            .endAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))); })
+                            .innerRadius(function(d) { return Math.max(0, parentY(d.y)); })
+                            .outerRadius(function(d) { return Math.max(0, parentY(d.y + d.dy)); });
+                        return arcParent(d);
+                    })
+                    .style("fill", "black")
+                    .style("opacity", 1) // 親ノードは不透明
+                    .on("click", click)
+                    .on("mouseover", mouseover)
+                    .on("mouseout", mouseout);
+            }
+
+            updateNodeCount(nodes);
+            console.log("x.range_2:", x.range());
+        });
+    }
+}*/
+
+        
     function click(d) {
             var startAngle = x(d.x);
             var endAngle = x(d.x + d.dx);
@@ -234,11 +570,11 @@
                     svg.selectAll("path").remove();
                     svg.selectAll("text").remove(); // ラベルをクリア
         
-                    var nodes = partition.nodes(subtree);
-                    /*
+                    //var nodes = partition.nodes(subtree);
+                    
                     var nodes = partition.nodes(subtree).filter(function(d) {
                         return d.depth > 0;
-                    });*/
+                    });
         
                     var path = svg.selectAll("path").data(nodes).enter().append("path")
                         .attr("d", arc)
@@ -353,6 +689,8 @@
                             }
                         } else {
                         previousTopNode = d;
+                        console.log(d.name,"のd.x:", d.x);
+                        console.log(d.name, "のd.dx:", d.dx);
         
                         svg.transition().duration(1000).tween("scale", function() {
                             let xd = d3.interpolate(x.domain(), [d.x, d.x + d.dx]),
@@ -475,11 +813,13 @@
 
         // Calculate r and theta
         var r = y(d.y + d.dy / 2); // Average radius of the arc
+        var ex = x(d.x + d.dx);
+        var sx = x(d.x);
         var theta = x(d.x + d.dx) - x(d.x); // Angle in radians
         var rTheta = r * theta;
 
         tooltip.style("visibility", "visible")
-        .html(`Node: ${d.name}<br>Value: ${d.value}<br>r: ${r.toFixed(2)}, θ: ${theta.toFixed(2)}<br>r * θ: ${rTheta.toFixed(2)}<br>Color (CIELab): ${labColor.toString()}`);
+        .html(`Node: ${d.name}<br>Value: ${d.value}<br>r: ${r.toFixed(2)}, θ: ${theta.toFixed(2)}(${d.x.toFixed(2)}~${(d.x+d.dx).toFixed(2)})<br>r * θ: ${rTheta.toFixed(2)}<br>Color (CIELab): ${labColor.toString()}`);
         /*
         tooltip.style("visibility", "visible")
             .html(`Node: ${d.name}<br>r: ${r.toFixed(2)}, θ: ${theta.toFixed(2)}<br>r * θ: ${rTheta.toFixed(2)}<br>Color (CIELab): ${labColor.toString()}`);*/
