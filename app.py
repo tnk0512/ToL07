@@ -7,7 +7,7 @@ app = Flask(__name__)
 
 class TreeOfLife:
     # Load the TreeOfLife data
-    with open('static/data/simple_withValue.json') as f:
+    with open('static/data/tree_of_lives_withValue.json') as f:
         ToL_data = json.load(f)
 
     def __init__(self):
@@ -71,11 +71,23 @@ def index():
 
 @app.route('/data', methods=['POST'])
 def get_subtree():
-    name = '1' # ここを変える！！
+    name = 'Biota' # ここを変える！！
     depth = 4
     subtree, leaf_nodes = ToL.subtree(name=name, depth=depth)
     return jsonify({"life": subtree, "leaf_nodes": leaf_nodes})
 
+@app.route('/subtree', methods=['POST'])
+def get_subtree_on_click():
+    data = request.get_json()
+    name = data['name']
+    # クリックされたノードを取得
+    clicknode = ToL.life(name=name)
+    newtree, _ = ToL.subtree(name=name, depth=4)
+    parent = ToL.life(n=clicknode['parent']) if clicknode['parent'] != -1 else None
+    return jsonify({"newtree": newtree, "parent": parent})
+
+
+'''
 @app.route('/subtree', methods=['POST'])
 def get_subtree_on_click():
     data = request.get_json()
@@ -97,17 +109,20 @@ def get_subtree_on_click():
 
     parent = ToL.life(n=clicknode['parent']) if clicknode['parent'] != -1 else None
     return jsonify({"newtree": newtree, "parent": parent})
+'''
 
 @app.route('/parentclick', methods=['POST'])
 def parentclick():
     data = request.get_json()
     name = data['name']
+    # クリックされたノードを取得
+    clicknode = ToL.life(name=name)
 
     # 親ノードのツリーを深さ4まで取得
     newtree, _ = ToL.subtree(name=name, depth=4)
 
     # 親ノードを取得
-    parent = ToL.life(name=name)
+    parent = ToL.life(n=clicknode['parent']) if clicknode['parent'] != -1 else None
 
     return jsonify({"newtree": newtree, "parent": parent})
 
