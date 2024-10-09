@@ -136,12 +136,18 @@
             //.style("stroke-width", "1px")  // 縁の幅を設定
             .on("click", click);
     
+        // 合体ノードには透明度を設定
         var path = svg.selectAll("path")
             .data(nodes)
             .enter().append("path")
             .attr("d", arc)
-            .style("fill", fillColor);
-    
+            .style("fill", fillColor)
+            .style("opacity", function(d) {
+                return d.is_merged ? 0.3 : 1;
+            })
+            .on("mouseover", mouseover)
+            .on("mouseout", mouseout);
+
         // Non-clickable paths
         var nonClickablePaths = path.filter(function(d) {
             var r = y(d.y + d.dy / 2); // Average radius of the arc
@@ -154,9 +160,7 @@
             return !nonClickablePaths.data().includes(d);
         });
     
-        clickablePaths.on("click", click)
-            .on("mouseover", mouseover)
-            .on("mouseout", mouseout);
+        clickablePaths.on("click", click);
         
         // Initial label rendering
         var text = svg.selectAll("text")
@@ -172,7 +176,8 @@
                     .attr("text-anchor", "middle")
                     .attr("font-size", "10px")
                     .text(function(d) {
-                        return d.name;
+                        // 合体ノードなら合体数を表示
+                        return d.is_merged ? d.merge_count : d.name;
                     });
     
         updateNodeCount(nodes);
@@ -242,7 +247,7 @@
             svg.selectAll("text").remove(); // ラベルをクリア
 
             var nodes = partition.nodes(subtree).filter(function(d) {
-                return d.depth > 0;
+                return d.depth >= 0;
             });
             x = d3.scale.linear().range([0, 2 * Math.PI]);
 
@@ -250,6 +255,9 @@
             var path = svg.selectAll("path").data(nodes).enter().append("path")
                 .attr("d", arc)
                 .style("fill", fillColor)
+                .style("opacity", function(d) {
+                    return d.is_merged ? 0.3 : 1;
+                })
                 .on("mouseover", mouseover)
                 .on("mouseout", mouseout);
 
@@ -438,6 +446,9 @@
             var path = svg.selectAll("path").data(nodes).enter().append("path")
                 .attr("d", arc)
                 .style("fill", fillColor)
+                .style("opacity", function(d) {
+                    return d.is_merged ? 0.3 : 1;
+                })
                 .on("mouseover", mouseover)
                 .on("mouseout", mouseout);
 
@@ -619,13 +630,14 @@
 
         // Calculate r and theta
         var r = y(d.y + d.dy / 2); // Average radius of the arc
-        var ex = x(d.x + d.dx);
-        var sx = x(d.x);
+        //var ex = x(d.x + d.dx);
+        //var sx = x(d.x);
         var theta = x(d.x + d.dx) - x(d.x); // Angle in radians
         var rTheta = r * theta;
 
         tooltip.style("visibility", "visible")
-        .html(`Node: ${d.name}<br>Value: ${d.value}<br>r: ${r.toFixed(2)}(${y(d.dy)}), θ: ${theta.toFixed(2)}(${d.x.toFixed(2)}~${(d.x+d.dx).toFixed(2)})<br>r * θ: ${rTheta.toFixed(2)}<br>Color (CIELab): ${labColor.toString()}`);
+        .html(`Node: ${d.name}<br>Value: ${d.value}<br>${d.is_merged ? 'Merged count: ' + d.merge_count + '<br>' : ''}r: ${r.toFixed(2)}(${y(d.dy)}), θ: ${theta.toFixed(2)}<br>r * θ: ${rTheta.toFixed(2)}<br>Color (CIELab): ${labColor.toString()}`);
+    
         if (rTheta >= sizeCriterion) {
             overviewSvg.selectAll("path")
             .filter(function(node) { return node.name === d.name; })

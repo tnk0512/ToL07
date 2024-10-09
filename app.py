@@ -51,7 +51,46 @@ class TreeOfLife:
     
     def subtrees(self, ns=[], depth=1):
         return dict(zip(ns, [self.subtree(n=n, depth=depth) for n in ns]))
+
+# ノード合体の関数
+def merge_small_nodes(node, root_value):
+    threshold = root_value / 1000
+    new_children = []
+    merge_group = []
     
+    for child in node.get('children', []):
+        if child['value'] <= threshold:
+            merge_group.append(child)
+        else:
+            # 合体する必要のないノード
+            if merge_group:
+                # 合体ノードを作成
+                merged_node = {
+                    'name': f"Merged-{merge_group[0]['name']}",  # 左端の名前を使用
+                    'value': sum(c['value'] for c in merge_group),  # 合計値
+                    'children': [],
+                    'is_merged': True,  # 合体ノードにフラグを付ける
+                    'merge_count': len(merge_group)  # 合体したノードの数をカウント
+                }
+                new_children.append(merged_node)
+                merge_group = []
+            new_children.append(child)
+    
+    # 最後の合体ノードが残っている場合
+    if merge_group:
+        merged_node = {
+            'name': f"Merged-{merge_group[0]['name']}",
+            'value': sum(c['value'] for c in merge_group),
+            'children': [],
+            'is_merged': True,
+            'merge_count': len(merge_group)
+        }
+        new_children.append(merged_node)
+    
+    node['children'] = new_children
+    for child in node['children']:
+        merge_small_nodes(child, root_value)
+
 # リーフノードのchildrenを変換する関数
 def convert_leaf_nodes(node, leaf_nodes):
     if node["n"] in leaf_nodes:
@@ -74,6 +113,9 @@ def get_subtree():
     name = 'Biota' # ここを変える！！
     depth = 4
     subtree, leaf_nodes = ToL.subtree(name=name, depth=depth)
+
+    # 合体処理を適用
+    merge_small_nodes(subtree, subtree['value'])
     return jsonify({"life": subtree, "leaf_nodes": leaf_nodes})
 
 @app.route('/subtree', methods=['POST'])
@@ -83,6 +125,8 @@ def get_subtree_on_click():
     # クリックされたノードを取得
     clicknode = ToL.life(name=name)
     newtree, _ = ToL.subtree(name=name, depth=4)
+    # 合体処理を適用
+    merge_small_nodes(newtree, newtree['value'])
     parent = ToL.life(n=clicknode['parent']) if clicknode['parent'] != -1 else None
     return jsonify({"newtree": newtree, "parent": parent})
 
@@ -120,6 +164,8 @@ def parentclick():
 
     # 親ノードのツリーを深さ4まで取得
     newtree, _ = ToL.subtree(name=name, depth=4)
+    # 合体処理を適用
+    merge_small_nodes(newtree, newtree['value'])
 
     # 親ノードを取得
     parent = ToL.life(n=clicknode['parent']) if clicknode['parent'] != -1 else None
