@@ -74,7 +74,7 @@
     var maxdepth = 20;  //biotaだから
     // 基準
     var sizeCriterion = 12; // クリック可能なノード
-    var labelCriterion = 50; // ラベルを表示するノード
+    var labelCriterion = 30; // ラベルを表示するノード
     
     // Load the initial data using AJAX POST request
     fetch('/data', {
@@ -198,6 +198,7 @@
 
     
     function click(d) {
+    var startTime = performance.now();
     var startAngle = x(d.x);
     var endAngle = x(d.x + d.dx);
     //let initialColor = d3.select(this).style("fill");
@@ -216,7 +217,8 @@
     }
 
     var nodeDepth = getNodeDepth(d, previousClickDepth);
-    console.log("クリックノードの深さ：", nodeDepth);
+    console.log(`${d.name}の深さ： ${d.depth}`);
+    console.log(`真の${d.name}の深さ： ${nodeDepth}`);
 
     // 現在の深さを保存して次回のクリック時に使用
     previousClickDepth = nodeDepth;
@@ -348,7 +350,8 @@
                             .attr("text-anchor", "middle")
                             .attr("font-size", "10px")
                             .text(function(d) {
-                                return d.name;
+                                // 合体ノードなら合体数を表示
+                                return d.is_merged ? d.merge_count : d.name;
                             })
                             .style("visibility", function(d) {
                                 return isNodeVisible(d, x.domain(), y.domain()) ? "visible" : "hidden";
@@ -376,8 +379,8 @@
                             .outerRadius(function(d) { return Math.max(0, parentY(d.y + d.dy)); });
                         return arcParent(d);
                     })
-                    .style("fill", "#fff")
-                    .style("opacity", 1) // 親ノードは不透明
+                    .style("fill", "gray")
+                    .style("opacity", 0.5) // 親ノードは不透明
                     .on("click", click)
                     .on("mouseover", mouseover)
                     .on("mouseout", mouseout);
@@ -393,11 +396,19 @@
             },
             body: JSON.stringify({ name: d.name })
         })
-        .then(response => response.json())
+        //.then(response => response.json())
+        .then(response => {
+            const contentLength = response.headers.get('content-length');
+            console.log(`Response size: ${contentLength} bytes`);  // 受信データのサイズを表示
+            return response.json();
+        })
         .then(data => {
             var subtree = data.newtree;
             var parentNode = data.parent;
-            console.log("newtree", subtree);
+
+            var endTime = performance.now();
+            var timeTaken = endTime - startTime;
+            console.log(`Time taken: ${timeTaken.toFixed(2)} ms`);
             // クリック前の表示をキャンバスに保存
             var svgElement = document.querySelector("#mainSvg");
             var previousCanvas = document.querySelector("canvas");
@@ -495,8 +506,8 @@
                 .on("click", click);
 
             previousTopNode = d;
-            console.log(d.name,"のd.x:", d.x);
-            console.log(d.name, "のd.dx:", d.dx);
+            //console.log(d.name,"のd.x:", d.x);
+            //console.log(d.name, "のd.dx:", d.dx);
 
             svg.transition()
             //.delay(2000)
@@ -541,7 +552,8 @@
                         .attr("text-anchor", "middle")
                         .attr("font-size", "10px")
                         .text(function(d) {
-                            return d.name;
+                            // 合体ノードなら合体数を表示
+                            return d.is_merged ? d.merge_count : d.name;
                         })
                         .style("visibility", function(d) {
                             return isNodeVisible(d, x.domain(), y.domain()) ? "visible" : "hidden";
@@ -565,7 +577,7 @@
                                 return arcParent(d);
                             })
                             .style("fill", "gray")
-                            .style("opacity", 1) // 親ノードは不透明
+                            .style("opacity",0.5) // 親ノードは不透明
                             .on("click", click)
                             .on("mouseover", mouseover)
                             .on("mouseout", mouseout);
@@ -576,8 +588,8 @@
             });
 
             updateNodeCount(nodes);
-            console.log("x.range_2:", x.range());
-        });
+        })
+        .catch(error => console.error("Error fetching subtree data:", error));
     }
 }
 
