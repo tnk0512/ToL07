@@ -37,6 +37,15 @@
         <canvas id="overviewCanvas" width="250" height="250"></canvas>
     </div>
     <div id="pathDisplay">クリックノードのルートからのパス: </div> <!-- 追加：ルートノードからのパスを表示するdiv要素 -->
+    <!-- 検索用div要素の追加 -->
+    <div>
+        <input type="text" id="searchInput" placeholder="学名を入力">
+        <button onclick="searchAncestor()">検索</button>
+    </div>
+    
+    <!-- 先祖リスト表示用div要素の追加 -->
+    <div id="ancestorDisplay">先祖リスト: </div>
+    <div id="ancestorMessage"></div>
     <script>
     // Set up D3 layout and arc
     var width = 900,
@@ -69,6 +78,15 @@
         .attr("transform", "translate(" + (width / 2) + "," + (height / 2) + ")");
     
     var tooltip = d3.select("body").append("div").attr("class", "tooltip");
+    // 太枠のスタイル
+    const boldStrokeStyle = {
+        "stroke": "black",
+        "stroke-width": "2px",
+        "fill-opacity": 1,
+    };
+    
+    // サブツリー内のノードリスト
+    let subtreeNodeNames = [];
     var overviewSvg;
     //var levels = 5;
     var maxdepth = 20;  //biotaだから
@@ -93,6 +111,7 @@
     function drawChart(root) {
 
         var nodes = partition.nodes(root);
+        subtreeNodeNames = nodes.map(d => d.name);  // 表示されるサブツリー内のノード名を保存
 
         // Append image to the container
         d3.select("#overview").append("img")
@@ -199,8 +218,8 @@
     
     function click(d) {
     var startTime = performance.now();
-    var startAngle = x(d.x);
-    var endAngle = x(d.x + d.dx);
+    //var startAngle = x(d.x);
+    //var endAngle = x(d.x + d.dx);
     //let initialColor = d3.select(this).style("fill");
     var clickedNodeParent = d.parent;
     console.log("Clicked Node", d.name);
@@ -215,13 +234,12 @@
         }
         return getNodeDepth(node.parent, previousDepth + 1);
     }
+    var clicknodeDepth = getNodeDepth(d, previousClickDepth);
 
-    var nodeDepth = getNodeDepth(d, previousClickDepth);
-    console.log(`${d.name}の深さ： ${d.depth}`);
-    console.log(`真の${d.name}の深さ： ${nodeDepth}`);
-
-    // 現在の深さを保存して次回のクリック時に使用
-    previousClickDepth = nodeDepth;
+    function cubicBezierEase(t, p0, p1, p2, p3) {
+        //return t ** 3 * p0 + 3 * t ** 2 * (1-t) * p1 + 3 * t * (1-t) ** 2 * p2 + (1-t) ** 3 * p3;
+        return (1 - t) ** 3 * p0 + 3 * (1 - t) ** 2 * t * p1 + 3 * (1 - t) * t ** 2 * p2 + t ** 3 * p3;
+    }
 
     if (d.depth === 0 && previousTopNode) {
         pathList.pop();
@@ -251,6 +269,7 @@
             var nodes = partition.nodes(subtree).filter(function(d) {
                 return d.depth >= 0;
             });
+            subtreeNodeNames = nodes.map(d => d.name);
             x = d3.scale.linear().range([0, 2 * Math.PI]);
 
 
@@ -286,8 +305,8 @@
             previousEndAngle = overendAngle; // 追加：前回の終了角度を保存
             overviewX = d3.scale.linear().range([overstartAngle, overendAngle]);
             overviewY = d3.scale.linear().range([
-                overmaxradius * nodeDepth / maxdepth,
-                overmaxradius * (nodeDepth + 4 < maxdepth ? nodeDepth + 4 : maxdepth) / maxdepth
+                overmaxradius * clicknodeDepth / maxdepth,
+                overmaxradius * (clicknodeDepth + 4 < maxdepth ? clicknodeDepth + 4 : maxdepth) / maxdepth
             ]);
 
             var overviewArc = d3.svg.arc()
@@ -311,7 +330,7 @@
                 .on("click", click);
 
             svg.transition()
-                .duration(1000)
+                .duration(3000)
                 .tween("scale", function() {
                     let targetDepth = Math.min(d.y + 5 * d.dy, 1);
                     let //xd = d3.interpolate(x.domain(), [d.x, d.x + d.dx]),
@@ -389,6 +408,61 @@
             updateNodeCount(nodes);
         });
     } else {
+        // 動的に dispatch のステップを生成
+        var depthSteps = [];
+        var nodeStack = [];
+        var currentNode = d;
+        while (currentNode.depth > 1) {
+            depthSteps.unshift(currentNode.name);
+            nodeStack.unshift(currentNode);
+            currentNode = currentNode.parent;
+        }
+        depthSteps.unshift(currentNode.name);  // ルートノードを最後に追加
+        nodeStack.unshift(currentNode);  // ルートノードを最後に追加
+        // ステップを持つ dispatch を生成
+        //var dispatch = d3.dispatch.apply(null, depthSteps.map(name => `event.${name}`));
+        var dispatch = d3.dispatch("step");
+
+        // 各ステップに対してトランジション処理を設定
+        let currentIndex = 0;
+        const preClickDepth = previousClickDepth;
+        
+        dispatch.on("step", function(prevStartAngle, prevEndAngle) {
+            if (currentIndex >= nodeStack.length) return; // すべてのノードが終了したら停止
+        
+            const currentNode = nodeStack[currentIndex];
+            const nextNode = nodeStack[currentIndex + 1];
+            const nextNodeName = nextNode ? nextNode.name : null;
+        
+            // performClickActionを呼び出し、次のステップの処理を設定
+            performClickAction(currentNode, dispatch, "step", prevStartAngle, prevEndAngle, nextNodeName, preClickDepth);
+        
+            // インデックスを進める
+            currentIndex += 1;
+        });
+        
+        // 最初のステップを呼び出す
+        dispatch.step();
+    }
+
+    
+    function performClickAction(d, dispatch, stepName, prevStartAngle, prevEndAngle, nextNodeName, predepth) {
+        var startTime = performance.now();
+        // 前のステップの角度範囲を引き継ぐか、新しい範囲を設
+        var startAngle = prevStartAngle !== undefined ? prevStartAngle : x(d.x);
+        var endAngle = prevEndAngle !== undefined ? prevEndAngle : x(d.x + d.dx);
+        var clickedNodeParent = d.parent;
+        //var previousDepth = previousDepth !== undefined ? previousDepth : previousClickDepth;
+        var nodeDepth1 = predepth + d.depth;
+        // 現在の深さを保存して次回のクリック時に使用
+        //previousDepth = nodeDepth;
+        console.log("Clicked Node", d.name);
+        console.log("previ", previousClickDepth);
+        console.log(`${d.name}の深さ：${nodeDepth1}`);
+        //console.log("startAngle", startAngle);
+        //console.log("endAngle", endAngle);
+        
+        // ノードに対するその他のクリック処理（描画の更新など）
         fetch('/subtree', {
             method: 'POST',
             headers: {
@@ -399,7 +473,7 @@
         //.then(response => response.json())
         .then(response => {
             const contentLength = response.headers.get('content-length');
-            console.log(`Response size: ${contentLength} bytes`);  // 受信データのサイズを表示
+            //console.log(`Response size: ${contentLength} bytes`);  // 受信データのサイズを表示
             return response.json();
         })
         .then(data => {
@@ -408,13 +482,14 @@
 
             var endTime = performance.now();
             var timeTaken = endTime - startTime;
-            console.log(`Time taken: ${timeTaken.toFixed(2)} ms`);
+            //console.log(`Time taken: ${timeTaken.toFixed(2)} ms`);
             // クリック前の表示をキャンバスに保存
             var svgElement = document.querySelector("#mainSvg");
+            /*
             var previousCanvas = document.querySelector("canvas");
             if (previousCanvas) {
                 previousCanvas.remove();
-            }
+            }*/
             // テキスト要素を一時的に削除
             var textElements = svgElement.querySelectorAll("text");
             textElements.forEach(function(text) {
@@ -426,6 +501,7 @@
             var ctx = canvas.getContext("2d");
         
             var dataURL = "data:image/svg+xml;base64," + btoa(new XMLSerializer().serializeToString(svgElement));
+            
             var img = new Image();
             img.onload = function() {
                 ctx.drawImage(img, 0, 0);
@@ -442,17 +518,10 @@
             svg.selectAll("path").remove();
             svg.selectAll("text").remove(); // ラベルをクリア
 
-            //var nodes = partition.nodes(subtree);
-            
             x.range([startAngle, endAngle]);
             y.range([maxradius/5, maxradius*6/5]);
             //x.domain([0, 1]);
             var nodes =partition.nodes(subtree);
-            /*
-            var nodes = partition.nodes(subtree).filter(function(d) {
-                return d.depth > 0;
-            });*/
-            //x.range([0, 2 * Math.PI]);
 
             var path = svg.selectAll("path").data(nodes).enter().append("path")
                 .attr("d", arc)
@@ -474,15 +543,15 @@
                 .on("mouseover", mouseover)
                 .on("mouseout", mouseout);
 
-            var overstartAngle = previousStartAngle + (previousEndAngle - previousStartAngle) * d.x;
-            var overendAngle = previousStartAngle + (previousEndAngle - previousStartAngle) * (d.x + d.dx);
+            var overstartAngle = previousStartAngle + (previousEndAngle - previousStartAngle) * startAngle/(2*Math.PI);
+            var overendAngle = previousStartAngle + (previousEndAngle - previousStartAngle) * endAngle/(2*Math.PI);
 
             previousStartAngle = overstartAngle; // 追加：前回の開始角度を保存
             previousEndAngle = overendAngle; // 追加：前回の終了角度を保存
             overviewX = d3.scale.linear().range([overstartAngle, overendAngle]);
             overviewY = d3.scale.linear().range([
-                overmaxradius * nodeDepth / maxdepth,
-                overmaxradius * (nodeDepth + 4 < maxdepth ? nodeDepth + 4 : maxdepth) / maxdepth
+                overmaxradius * nodeDepth1 / maxdepth,
+                overmaxradius * (nodeDepth1 + 4 < maxdepth ? nodeDepth1 + 4 : maxdepth) / maxdepth
             ]);
 
             var overviewArc = d3.svg.arc()
@@ -506,19 +575,41 @@
                 .on("click", click);
 
             previousTopNode = d;
-            //console.log(d.name,"のd.x:", d.x);
-            //console.log(d.name, "のd.dx:", d.dx);
+
+            function easeInOut(t) {
+                return t < 0.5
+                    //? 4 * t * t * t
+                    //? 8 * Math.pow(t, 4)
+                    ? 32 * Math.pow(t, 6)
+                    //: 1 - Math.pow(-2 * t + 2, 3) / 2;
+                    //: 1 - Math.pow(-2 * t + 2, 4) / 2;
+                    : 1 - Math.pow(-2 * t + 2, 6) / 2;
+            }
+            function cubicBezier(t, p0, p1, p2, p3) {
+                const u = 1 - t;
+                return 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t;
+            }
 
             svg.transition()
-            //.delay(2000)
-            .duration(4000)
+            //.delay(3000)
+            .duration(5000)
+            .ease("cubic-in-out")
+            /*
+            .ease(function(t) { // カスタムイージングを設定
+                //return cubicBezierEase(t, 0, 0.58, 0.42, 1);
+                return cubicBezierEase(t, 0, 0.25, 0.75, 1);
+            })*/
             .tween("scale", function() {
                 let xr = d3.interpolate(x.range(), [0, 2*Math.PI]),
                     yr = d3.interpolate(y.range(), [0, maxradius]);
                 return function(t){
-                    x.range(xr(t));
-                    y.range(yr(t));
-                    canvas.style.opacity = 0.5 * (1 - t);
+                    //let easedT = 1 / (1 + Math.exp(-8 * (t - 0.5))); // シグモイド関数
+                    //let easedT = d3.easeCubicInOut(t); 
+                    //let easedT = easeInOut(t);
+                    let easedT = cubicBezier(t, 0.0, 0.02, 0.98, 1.0)
+                    x.range(xr(easedT));
+                    y.range(yr(easedT));
+                    canvas.style.opacity = 0.5 * (1 - easedT);
                 };
                 /*
                 let xd = d3.interpolate(x.domain(), [d.x, d.x + d.dx]),
@@ -584,14 +675,76 @@
                     }
                     // トランジション終了後にキャンバスを削除
                     canvas.remove();
-                }
+                    // 次のノードのstartAngleとendAngleを求める
+                    var nextStartAngle, nextEndAngle;
+                    if (nextNodeName) {
+                        const nextNode = nodes.find(n => n.name === nextNodeName);
+                        if (nextNode) {
+                            nextStartAngle = x(nextNode.x);
+                            nextEndAngle = x(nextNode.x + nextNode.dx);
+                        }
+                    }
+    
+                    // 次のステップ（固定のstepイベント）を呼び出し、次のstartAngleとendAngleを渡す
+                    dispatch.step(nextStartAngle, nextEndAngle);
+                    }
             });
 
+            subtreeNodeNames = nodes.map(d => d.name);
             updateNodeCount(nodes);
+            previousClickDepth = clicknodeDepth;
         })
         .catch(error => console.error("Error fetching subtree data:", error));
     }
 }
+    // ancestors のノードを強調表示
+    function highlightAncestors(ancestors) {
+        // すべてのノードの太枠スタイルをリセット
+        svg.selectAll("path")
+            .style("stroke", null)
+            .style("stroke-width", null);
+        // メッセージをクリア
+        document.getElementById("ancestorMessage").innerText = "";
+    
+        // ancestors内かつサブツリー内のノードを太枠で強調
+        let foundInSubtree = false;
+        ancestors.forEach(name => {
+            if (subtreeNodeNames.includes(name)) {
+                svg.selectAll("path")
+                    .filter(d => d.name === name)
+                    .style("stroke", boldStrokeStyle.stroke)
+                    .style("stroke-width", boldStrokeStyle["stroke-width"]);
+                foundInSubtree = true;
+            }
+        });
+    
+        // ancestors のノードがサブツリー内にない場合、メッセージを表示
+        if (!foundInSubtree) {
+            document.getElementById("ancestorMessage").innerText = "先祖ノードはこのサブツリーにはありません";
+        }
+    }
+
+
+    // 学名検索して先祖リストを取得する関数
+    function searchAncestor() {
+        const name = document.getElementById('searchInput').value;
+        fetch('/ancestor', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name: name })
+        })
+        .then(response => response.json())
+        .then(data => {
+            const ancestors = data.ancestors;
+            document.getElementById('ancestorDisplay').innerText = "先祖リスト: " + ancestors.join(" -> ");
+            
+            // ancestors のノードを強調表示
+            highlightAncestors(ancestors);
+        })
+        .catch(error => console.error("Error fetching ancestors:", error));
+    }
 
     function updateNodeCount(nodes) {
         var visibleNodes = nodes.filter(function(d) {
