@@ -93,6 +93,25 @@ class TreeOfLife:
     
     def subtrees(self, ns=[], depth=1):
         return dict(zip(ns, [self.subtree(n=n, depth=depth) for n in ns]))
+    
+    # 先祖をたどる関数を追加
+    def ancestor(self, name=None):
+        node = self.life(name=name)
+        ancestors = []
+
+        # ノードが存在しない場合のチェック
+        if node is None:
+            return ["指定された学名が見つかりませんでした"]
+
+        # 先祖をたどるループ
+        while node["parent"] is not None and node["n"] != -1:
+            ancestors.append(node["name"])
+            node = self.life(n=node["parent"])
+            # ルートノードや親ノードが見つからない場合のエラーチェック
+            if node is None:
+                ancestors.append("親ノードが見つかりません")
+                break
+        return ancestors
 
 ToL = TreeOfLife()
 
@@ -102,8 +121,10 @@ def index():
 
 @app.route('/data', methods=['POST'])
 def get_subtree():
-    name = 'Biota' # ここを変える！！
+    #n = -1
+    name = 'Biota' # ここを変える！！Biotaか1
     depth = 4
+    #subtree, leaf_nodes = ToL.subtree(n=n, depth=depth)
     subtree, leaf_nodes = ToL.subtree(name=name, depth=depth)
 
     return jsonify({"life": subtree, "leaf_nodes": leaf_nodes})
@@ -133,6 +154,13 @@ def parentclick():
     parent = ToL.life(n=clicknode['parent']) if clicknode['parent'] != -1 else None
 
     return jsonify({"newtree": newtree, "parent": parent})
+
+@app.route('/ancestor', methods=['POST'])
+def get_ancestor():
+    data = request.get_json()
+    name = data.get('name')
+    ancestors = ToL.ancestor(name)
+    return jsonify({"ancestors": ancestors})
 
 if __name__ == '__main__':
     app.run(debug=True)
