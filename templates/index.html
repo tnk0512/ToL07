@@ -44,12 +44,12 @@
     </div>
     
     <!-- 先祖リスト表示用div要素の追加 -->
-    <div id="ancestorDisplay">先祖リスト: </div>
-    <div id="ancestorMessage"></div>
+    <div id="ancestorDisplay" style="position: absolute; left: 1px; right: 270px; bottom: 40px; padding: 10px;">先祖リスト: </div>
+    <div id="ancestorMessage" style="position: absolute; left: 1px; right: 270px; bottom: 10px; padding: 10px;"></div>
     <script>
     // Set up D3 layout and arc
-    var width = 900,
-        height = 760,
+    var width = 700,
+        height = 560,
         maxradius = Math.min(width, height) / 2;
 
     var overwidth = 250,
@@ -74,8 +74,19 @@
         .attr("id", "mainSvg")
         .attr("width", width)
         .attr("height", height)
+        //.style("position", "absolute")
+        //.style("top", "140px")
         .append("g")
         .attr("transform", "translate(" + (width / 2) + "," + (height / 2) + ")");
+
+    // クリッピングパスを追加して、maxradius以上の領域が表示されないようにする
+    svg.append("clipPath")
+        .attr("id", "circleClip")
+        .append("circle")
+        .attr("r", maxradius);
+    
+    // `clip-path` 属性を適用して円形にクリッピング
+    svg.attr("clip-path", "url(#circleClip)");
     
     var tooltip = d3.select("body").append("div").attr("class", "tooltip");
     // 太枠のスタイル
@@ -457,8 +468,6 @@
         // 現在の深さを保存して次回のクリック時に使用
         //previousDepth = nodeDepth;
         console.log("Clicked Node", d.name);
-        console.log("previ", previousClickDepth);
-        console.log(`${d.name}の深さ：${nodeDepth1}`);
         //console.log("startAngle", startAngle);
         //console.log("endAngle", endAngle);
         
@@ -589,11 +598,21 @@
                 const u = 1 - t;
                 return 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t;
             }
+            function sigmoidEase(t) {
+                const k = 8; // スケール係数
+                let sig = 1 / (1 + Math.exp(-k * (t - 0.5))); // シグモイド関数
+                const maxSig = 1 / (1 + Math.exp(-k * 0.5))
+                const minSig = 1 / (1 + Math.exp(-k * -0.5)); // sigmoid(-4) の値
+                const maxSigx_4 = 1 / (1 + Math.exp(-k*4)); // sigmoid(4) の値
+                //return (sig - minSig) / (maxSig - minSig); // [0, 1] にスケーリング
+                return (maxSigx_4 / maxSig) * (sig - minSig) / (maxSig - minSig);
+            }
+
 
             svg.transition()
             //.delay(3000)
             .duration(5000)
-            .ease("cubic-in-out")
+            //.ease("cubic-in-out")
             /*
             .ease(function(t) { // カスタムイージングを設定
                 //return cubicBezierEase(t, 0, 0.58, 0.42, 1);
@@ -606,7 +625,8 @@
                     //let easedT = 1 / (1 + Math.exp(-8 * (t - 0.5))); // シグモイド関数
                     //let easedT = d3.easeCubicInOut(t); 
                     //let easedT = easeInOut(t);
-                    let easedT = cubicBezier(t, 0.0, 0.02, 0.98, 1.0)
+                    //let easedT = cubicBezier(t, 0.0, 0.02, 0.98, 1.0)
+                    let easedT = sigmoidEase(t); // ease-in-out に変換
                     x.range(xr(easedT));
                     y.range(yr(easedT));
                     canvas.style.opacity = 0.5 * (1 - easedT);

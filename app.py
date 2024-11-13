@@ -7,7 +7,8 @@ app = Flask(__name__)
 
 class TreeOfLife:
     # Load the TreeOfLife data
-    with open('static/data/tree_of_lives_withValue.json') as f:
+    #with open('static/data/tree_of_lives_withValue.json') as f:
+    with open('static/data/simple_withValue.json') as f:
         ToL_data = json.load(f)
 
     def __init__(self):
@@ -122,7 +123,7 @@ def index():
 @app.route('/data', methods=['POST'])
 def get_subtree():
     #n = -1
-    name = 'Biota' # ここを変える！！Biotaか1
+    name = '1' # ここを変える！！Biotaか1
     depth = 4
     #subtree, leaf_nodes = ToL.subtree(n=n, depth=depth)
     subtree, leaf_nodes = ToL.subtree(name=name, depth=depth)
