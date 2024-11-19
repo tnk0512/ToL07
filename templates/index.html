@@ -31,6 +31,9 @@
     #barSvg {
         pointer-events: none; /* 上層のSVGはポインターイベントを無効化 */
     }
+    #copySvg{
+        pointer-events: none;
+    }
 
     #barSvg rect {
         pointer-events: auto; /* ドラッグ可能なバーは例外として有効 */
@@ -75,8 +78,8 @@
         .sort(null);
 
     var arc = d3.svg.arc()
-        .startAngle(function(d) { return Math.PI/2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))); })
-        .endAngle(function(d) { return Math.PI/2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))); })
+        .startAngle(function(d) { return Math.PI/2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))) + offset; })
+        .endAngle(function(d) { return Math.PI/2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))) + offset; })
         .innerRadius(function(d) { return Math.max(0, y(d.y)); })
         .outerRadius(function(d) { return Math.max(0, y(d.y + d.dy)); });
     
@@ -126,10 +129,6 @@
         .style("cursor", "grab")
         .style("fill", "grey")
         .attr("transform-origin", "10px 25px"); // 長方形の中心を基準に回転
-
-    // 回転の進捗を表す変数
-    let rotationProgress = 0;
-    let rotationAngle = 0;
     
     // 正規化された位置を表示するテキスト要素
     var positionText = barSvg.append("text")
@@ -138,6 +137,7 @@
         .style("font-size", "16px")
         .style("fill", "black")
         .text("Position: 0.00");
+
     
     var tooltip = d3.select("body").append("div").attr("class", "tooltip");
     // 太枠のスタイル
@@ -155,10 +155,128 @@
     // 基準
     var sizeCriterion = 12; // クリック可能なノード
     var labelCriterion = 30; // ラベルを表示するノード
-    var initialAngle = 0;  // サンバースト図の初期角度を追跡
+    let offset = 0; // 共通のオフセット値
+    let drag_offset = 0; // ドラッグによるオフセット
+    let lastDragOffset = 0; // 最後のドラッグ時のオフセット値
+
+    // ラベルの追加
+    const offsetLabel = barSvg.append("text")
+            .attr("x", 5)
+            .attr("y", 160)
+            .attr("fill", "black")
+            .style("font-size", "14px")
+            .text(`Offset: ${offset.toFixed(2)}`);
+        
+    const dragOffsetLabel = barSvg.append("text")
+        .attr("x", 5)
+        .attr("y", 180)
+        .attr("fill", "black")
+        .style("font-size", "14px")
+        .text(`Drag Offset: ${drag_offset.toFixed(2)}`);
+    
+    const opposingLabel = barSvg.append("text")
+        .attr("x", 5)
+        .attr("y", 200)
+        .attr("fill", "black")
+        .style("font-size", "14px")
+        .text(`Opposing: ${offset.toFixed(2)}`);
+
+    function handleDrag(normalizedAngle) {
+        // 前回のドラッグとの差分を計算
+        const dragDelta = 2 * Math.PI * normalizedAngle - lastDragOffset;
+        offset += dragDelta;
+        lastDragOffset = 2 * Math.PI * normalizedAngle; // 現在のドラッグ値を保存
+    
+        // arc を更新して再描画
+        updateArc();
+    }
+
+    function updateArc() {
+        // arc を再描画
+        svg.selectAll("path").attr("d", arc);
+    
+        // 必要に応じてラベルや他の要素を更新
+        updateLabels(nodes, arc);
+    }
+
+    
+    /*
+    function updateArc() {
+        // 通常ノードの arc 設定
+        var arc = d3.svg.arc()
+            .startAngle(function(d) {
+                return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))) + offset;
+            })
+            .endAngle(function(d) {
+                return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))) + offset;
+            })
+            .innerRadius(function(d) { return Math.max(0, y(d.y)); })
+            .outerRadius(function(d) { return Math.max(0, y(d.y + d.dy)); });
+    
+        // 通常ノードの再描画
+        svg.selectAll("path:not(.parentNodeArc)").attr("d", arc);
+    
+        // parentNode の arc 設定（offset を適用しない）
+        if (parentNode) {
+            var parentY = d3.scale.linear().range([0, 20]);
+            svg.selectAll(".parentNodeArc")
+                .attr("d", d3.svg.arc()
+                    .startAngle(function(d) {
+                        return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))); // offset を適用しない
+                    })
+                    .endAngle(function(d) {
+                        return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))); // offset を適用しない
+                    })
+                    .innerRadius(function(d) { return Math.max(0, parentY(d.y)); })
+                    .outerRadius(function(d) { return Math.max(0, parentY(d.y + d.dy)); }));
+        }
+    }*/
+
+
+    // ドラッグイベントの設定
+    function initializeDrag(nodes, arc, parentNode) {
+        return d3.behavior.drag()
+            .on("dragstart", function () {
+                svg.selectAll("text").style("visibility", "hidden"); // ラベルを非表示
+            })
+            .on("drag", function () {
+                // d3.event から座標を取得
+                const mouseX = d3.event.x;
+                const mouseY = d3.event.y;
+                const angle = Math.atan2(mouseY - centerY, mouseX - centerX);
+                const correctedAngle = angle + Math.PI / 2; // 角度の補正
+                const normalizedAngle = (correctedAngle >= 0 ? correctedAngle : (2 * Math.PI + correctedAngle)) / (2 * Math.PI);
+    
+                // ドラッグ処理を呼び出し
+                handleDrag(normalizedAngle);
+            })
+            .on("dragend", function () {
+                svg.selectAll("text").remove(); // ラベルを一旦削除
+    
+                // パスを更新
+                svg.selectAll("path").attr("d", arc);
+    
+                // parentNode専用のパスを更新
+                if (parentNode) {
+                    const parentY = d3.scale.linear().range([0, 20]); // parentNode用スケール
+                    svg.selectAll(".parentNodeArc")
+                        .attr("d", d3.svg.arc()
+                            .startAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))); })
+                            .endAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))); })
+                            .innerRadius(function(d) { return Math.max(0, parentY(d.y)); })
+                            .outerRadius(function(d) { return Math.max(0, parentY(d.y + d.dy)); })
+                        );
+                }
+    
+                // ラベルを再描画
+                updateLabels(nodes, arc);
+            });
+    }
+    
+    
     // ドラッグイベントの設定
     function initializeDrag(nodes, arc, panrentNode) {
-        var fixedColors = {};
+        //var fixedColors = {};
 
         return d3.behavior.drag()
             .on("dragstart", function () {
@@ -174,6 +292,8 @@
                 var correctedAngle = angle + Math.PI / 2; // 角度の補正
                 var normalizedAngle = (correctedAngle >= 0 ? correctedAngle : (2 * Math.PI + correctedAngle)) / (2 * Math.PI);
 
+                // 新しいドラッグ位置を反映
+                //handleDrag(normalizedAngle);
                 // 新しい座標を計算（長方形の中心を円周上に配置する）
                 var newX = centerX + (maxradius + 25) * Math.cos(angle) - 10; // x座標
                 var newY = centerY + (maxradius + 25) * Math.sin(angle)+25; // y座標
@@ -194,6 +314,7 @@
                 // ノードデータを更新してラベルを再描画
                 svg.selectAll("text").remove(); // ラベルを一旦削除
             
+                
                 // 通常ノードのパスを更新
                 svg.selectAll("path:not(.parentNodeArc)")
                     .attr("d", arc);
@@ -213,12 +334,16 @@
             
                 // ラベルを再描画
                 updateLabels(nodes, arc);
+                // ラベルの更新
+                offsetLabel.text(`Offset: ${offset.toFixed(2)}`);
+                dragOffsetLabel.text(`Drag Offset: ${drag_offset.toFixed(2)}`);
             });
     }
 
     // サンバーストチャートの回転を制御する関数
     function rotateChart(normalizedAngle, arc) {
         var angleOffset = 2 * Math.PI * normalizedAngle;
+        drag_offset = angleOffset;
         // parentNodeのarcを別途更新
         if (parentNode) {
             var parentY = d3.scale.linear().range([0, 20]);
@@ -234,9 +359,9 @@
         // 他のノードのarcを更新
         svg.selectAll("path:not(.parentNodeArc)")
             .attr("d", arc.startAngle(function(d) {
-                return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))) + angleOffset;
+                return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))) + offset + angleOffset;
             }).endAngle(function(d) {
-                return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))) + angleOffset;
+                return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))) + offset + angleOffset;
             }));
     }
 
@@ -279,6 +404,23 @@
 
         var nodes = partition.nodes(root);
         subtreeNodeNames = nodes.map(d => d.name);  // 表示されるサブツリー内のノード名を保存
+
+        // mainSvg を描画する処理
+        const mainSvg = d3.select("#mainSvg");
+        
+        // copySvg を作成
+        const copySvg = d3.select("body")
+            .append("svg")
+            .attr("id", "copySvg")
+            .attr("width", mainSvg.attr("width"))
+            .attr("height", mainSvg.attr("height"))
+            .style("position", "absolute")
+            .style("top", mainSvg.style("top"))
+            .style("left", mainSvg.style("left"))
+            .style("opacity", 0);
+        
+        // 初回コピー
+        copyMainSvgToCopySvg();
 
         // Append image to the container
         d3.select("#overview").append("img")
@@ -362,7 +504,7 @@
 
     function fillColor(d) {
         let distance = y(d.y);
-        let angle = x(d.x);
+        let angle = x(d.x) - (d.opposingAngle || 0);
         let [L, a, b] = polarToCIELab(distance, angle, maxradius);
         return LabToHex(L, a, b);
     }
@@ -582,24 +724,33 @@
         var startAngle = prevStartAngle !== undefined ? prevStartAngle : x(d.x);
         var endAngle = prevEndAngle !== undefined ? prevEndAngle : x(d.x + d.dx);
         // 中心角度の計算
-        const opposingAngle = (x(d.x) + x(d.x + d.dx)) / 2 + Math.PI;
+        console.log(`${d.name}のx.range : (${startAngle/(2*Math.PI)}, ${endAngle/(2*Math.PI)})`);
+        const opposingAngle = (startAngle + endAngle) / 2 - Math.PI;
+        // クリック時の offset 更新
+        //offset += drag_offset; // 直前のドラッグオフセットを適用
+        offset -= opposingAngle; // クリックによるオフセットを調整
+        // ラベルの更新
+        offsetLabel.text(`Offset: ${offset.toFixed(2)}`);
+        opposingLabel.text(`Opposing: ${opposingAngle.toFixed(2)}`);
+        dragOffsetLabel.text(`Drag Offset: ${drag_offset.toFixed(2)}`);
         var clickedNodeParent = d.parent;
         //var previousDepth = previousDepth !== undefined ? previousDepth : previousClickDepth;
         var nodeDepth1 = predepth + d.depth;
         // 現在の深さを保存して次回のクリック時に使用
         //previousDepth = nodeDepth;
         console.log("Clicked Node", d.name);
-        //console.log("startAngle", startAngle);
-        //console.log("endAngle", endAngle);
-        function getArc() {
-            return d3.svg.arc()
-                .startAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))); })
-                .endAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))); })
-                .innerRadius(function(d) { return Math.max(0, y(d.y)); })
-                .outerRadius(function(d) { return Math.max(0, y(d.y + d.dy)); });
-        }
-
-        
+        // 既存の path の色を保存
+        const colorMap = {};
+        svg.selectAll("path").each(function(d) {
+            // 各ノードの名前をキーに現在の色を保存
+            colorMap[d.name] = d3.select(this).style("fill");
+        });
+        // Copy SVG の更新
+        const copySvg = d3.select("#copySvg");
+        copySvg.html(d3.select("#mainSvg").html()); // mainSvg をコピー
+    
+        // Copy SVG 内のテキストを削除
+        copySvg.selectAll("text").remove();
         // ノードに対するその他のクリック処理（描画の更新など）
         fetch('/subtree', {
             method: 'POST',
@@ -661,15 +812,26 @@
 
             svg.selectAll("path").remove();
             svg.selectAll("text").remove(); // ラベルをクリア
-
-            x.range([startAngle, endAngle]);
+            x.range([startAngle-opposingAngle, endAngle-opposingAngle]);
             y.range([maxradius/5, maxradius*6/5]);
             //x.domain([0, 1]);
             var nodes =partition.nodes(subtree);
 
+            /*
+            var arc = d3.svg.arc()
+                .startAngle(function(d) {
+                    // クリックされたノードに基づく中心角度の補正
+                    return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))) - opposingAngle;
+                })
+                .endAngle(function(d) {
+                    return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))) - opposingAngle;
+                })
+                .innerRadius(function(d) { return Math.max(0, y(d.y)); })
+                .outerRadius(function(d) { return Math.max(0, y(d.y + d.dy)); });*/
+            
             var path = svg.selectAll("path").data(nodes).enter().append("path")
                 .attr("d", arc)
-                .style("fill", fillColor)
+                //.style("fill", fillColor)
                 .style("opacity", function(d) {
                     return d.is_merged ? 0.3 : 1;
                 })
@@ -720,6 +882,7 @@
 
             previousTopNode = d;
 
+            // 遷移スピードEase-InOutで設定
             function sigmoidEase(t) {
                 const a = 3/4;
                 const k = 8; // スケール係数
@@ -729,78 +892,95 @@
                 //return (sig - minSig) / (maxSig - minSig); // [0, 1] にスケーリング
                 return (sig - minSig) / (maxSig - minSig);
             }
-
+            // Copy SVG の表示と透明度のアニメーション
+            d3.select("#copySvg")
+                .style("opacity", 0.5)
+                .transition()
+                .duration(5000)
+                .style("opacity", 0);
 
             svg.transition()
-            //.delay(8000)
-            .duration(5000)
-            .tween("scale", function() {
-                //let xr = d3.interpolate(x.range(), [opposingAngle - Math.PI, opposingAngle + Math.PI]),
-                let xr = d3.interpolate(x.range(), [0, 2*Math.PI]),
-                //let xr = d3.interpolate(x.range(), [-Math.PI, Math.PI]),
-                    yr = d3.interpolate(y.range(), [0, maxradius]);
-                return function(t){
-                    let easedT = sigmoidEase(t); // ease-in-out に変換
-                    x.range(xr(easedT));
-                    y.range(yr(easedT));
-                    canvas.style.opacity = 0.5 * (1 - easedT);
-                };
-            }).selectAll("path")
-            //.attrTween("d", function(d) { return function() { return getArc(d); }; })
-            .attrTween("d", function(d) { return function() { return arc(d); }; })
-            .styleTween("fill", function(d) {
-                let initialColor = d3.select(this).style("fill");
-                return function(t) {
-                    return d3.interpolateLab(initialColor, fillColor(d))(t);
-                };
-            }).each("end", function(e, i) {
-                if (i === 0) {
-                    updateNodeCount(nodes);
-                    if (parentNode) {
-                        parentNode.depth = 0;
-                        parentNode.x = 0;
-                        parentNode.dx = 1;
-                        parentNode.y = 0;
-                        parentNode.dy = 1;
-                        var parentY = d3.scale.linear().range([0, 20]);
-        
-                        var parentPath = svg.append("path")
-                            .datum(parentNode)
-                            .attr("class", "parentNodeArc")
-                            .attr("d", function(d) {
-                                var arcParent = d3.svg.arc()
-                                    .startAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))); })
-                                    .endAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))); })
-                                    .innerRadius(function(d) { return Math.max(0, parentY(d.y)); })
-                                    .outerRadius(function(d) { return Math.max(0, parentY(d.y + d.dy)); });
-                                return arcParent(d);
-                            })
-                            .style("fill", "gray")
-                            .style("opacity",0.5) // 親ノードは不透明
-                            .on("click", click)
-                            .on("mouseover", mouseover)
-                            .on("mouseout", mouseout);
-                    }
-                    // トランジション終了後にキャンバスを削除
-                    canvas.remove();
-                    var drag = initializeDrag(nodes, arc, parentNode); // ドラッグ設定を適用
-                    draggableBar.call(drag); // ドラッグ可能なバーに適用
-                        
-                    updateLabels(nodes, arc); // ラベルを初期描画
-                    // 次のノードのstartAngleとendAngleを求める
-                    var nextStartAngle, nextEndAngle;
-                    if (nextNodeName) {
-                        const nextNode = nodes.find(n => n.name === nextNodeName);
-                        if (nextNode) {
-                            nextStartAngle = x(nextNode.x);
-                            nextEndAngle = x(nextNode.x + nextNode.dx);
+                //.delay(4000)
+                .duration(5000)
+                .tween("scale", function() {
+                    // クリックされたノードに基づく中心角度
+                    const centerAngle = (startAngle + endAngle) / 2;
+            
+                    // 円全体を覆うための最終角度
+                    const finalStartAngle = centerAngle - Math.PI;
+                    const finalEndAngle = centerAngle + Math.PI;
+            
+                    let xr = d3.interpolate(x.range(), [0, 2 * Math.PI]),
+                        yr = d3.interpolate(y.range(), [0, maxradius]);
+            
+                    return function(t) {
+                        let easedT = sigmoidEase(t); // Ease-InOut
+                        x.range(xr(easedT));
+                        y.range(yr(easedT));
+                        canvas.style.opacity = 0 * (1 - easedT);  //元は、0.5 * (1 - easedT)
+                    };
+                })
+                .selectAll("path")
+                .attrTween("d", function(d) {
+                    return function() { return arc(d); };
+                })
+                .styleTween("fill", function(d) {
+                    const initialColor = colorMap[d.name] || "#000";
+                    return function(t) {
+                        return d3.interpolateLab(initialColor, fillColor(d))(t);
+                    };
+                })
+                .each("end", function(e, i) {
+                    if (i === 0) {
+                        updateNodeCount(nodes);
+                        if (parentNode) {
+                            parentNode.depth = 0;
+                            parentNode.x = 0;
+                            parentNode.dx = 1;
+                            parentNode.y = 0;
+                            parentNode.dy = 1;
+            
+                            var parentY = d3.scale.linear().range([0, 20]);
+            
+                            var parentPath = svg.append("path")
+                                .datum(parentNode)
+                                .attr("class", "parentNodeArc")
+                                .attr("d", function(d) {
+                                    var arcParent = d3.svg.arc()
+                                        .startAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))); })
+                                        .endAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))); })
+                                        .innerRadius(function(d) { return Math.max(0, parentY(d.y)); })
+                                        .outerRadius(function(d) { return Math.max(0, parentY(d.y + d.dy)); });
+                                    return arcParent(d);
+                                })
+                                .style("fill", "gray")
+                                .style("opacity", 0.5) // 親ノードは不透明
+                                .on("click", click)
+                                .on("mouseover", mouseover)
+                                .on("mouseout", mouseout);
                         }
+            
+                        // トランジション終了後にキャンバスを削除
+                        canvas.remove();
+                        var drag = initializeDrag(nodes, arc, parentNode); // ドラッグ設定を適用
+                        draggableBar.call(drag); // ドラッグ可能なバーに適用
+            
+                        updateLabels(nodes, arc); // ラベルを初期描画
+            
+                        // 次のノードの startAngle と endAngle を求める
+                        var nextStartAngle, nextEndAngle;
+                        if (nextNodeName) {
+                            const nextNode = nodes.find(n => n.name === nextNodeName);
+                            if (nextNode) {
+                                nextStartAngle = x(nextNode.x);
+                                nextEndAngle = x(nextNode.x + nextNode.dx);
+                            }
+                        }
+            
+                        // 次のステップ（固定の step イベント）を呼び出し
+                        dispatch.step(nextStartAngle, nextEndAngle);
                     }
-    
-                    // 次のステップ（固定のstepイベント）を呼び出し、次のstartAngleとendAngleを渡す
-                    dispatch.step(nextStartAngle, nextEndAngle);
-                    }
-            });
+                });
             subtreeNodeNames = nodes.map(d => d.name);
             updateNodeCount(nodes);
             previousClickDepth = clicknodeDepth;
@@ -808,6 +988,21 @@
         .catch(error => console.error("Error fetching subtree data:", error));
     }
 }
+    // mainSvg の内容を copySvg にコピーする関数
+    function copyMainSvgToCopySvg() {
+        const mainSvg = d3.select("#mainSvg");
+        const copySvg = d3.select("#copySvg");
+    
+        // copySvg をクリア
+        copySvg.html("");
+    
+        // mainSvg の内容をコピー
+        copySvg.node().innerHTML = mainSvg.node().innerHTML;
+    
+        // copySvg の透明度を初期値に設定
+        copySvg.style("opacity", 0.5);
+    }
+
     // ancestors のノードを強調表示
     function highlightAncestors(ancestors) {
         // すべてのノードの太枠スタイルをリセット
@@ -935,34 +1130,14 @@
         }
     }
 
-    function handleMouseDown(event) {
-        isDragging = true;
-        initialX = event.pageX;
-        d3.event.stopPropagation();  // 他のイベントを阻止
-    }
-    
-    function handleMouseMove(event) {
-        if (isDragging) {
-            const dx = event.pageX - initialX;
-            const rotationAngle = dx * 0.1; // 回転の度合い（適宜調整）
-    
-            // 回転を適用
-            svg.attr("transform", `translate(${width / 2}, ${height / 2}) rotate(${currentAngle + rotationAngle})`);
-        }
-    }
-    
-    function handleMouseUp() {
-        isDragging = false;
-        currentAngle += (d3.event.pageX - initialX) * 0.1; // 最終的な回転角度を更新
-    }
-
     svg.on("mousemove", function() {
         tooltip.style("top", (d3.event.pageY + 10) + "px")
                .style("left", (d3.event.pageX + 10) + "px");
     });
     
     function polarToCIELab(distance, angle, maxDistance) {
-        let L = 100 * (1 - 3 * distance / (4 * maxDistance));
+        //let L = 100 * (1 - 3 * distance / (4 * maxDistance));
+        let L = 90 * (1 - 3 * distance / (4 * maxDistance));
         let a = 160 * distance / maxDistance * Math.cos(angle);
         let b = 160 * distance / maxDistance * Math.sin(angle);
         return [L, a, b];
