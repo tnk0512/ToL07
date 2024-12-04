@@ -95,6 +95,29 @@ class TreeOfLife:
     def subtrees(self, ns=[], depth=1):
         return dict(zip(ns, [self.subtree(n=n, depth=depth) for n in ns]))
     
+    # 先祖をたどる関数を部分一致に対応
+    def ancestor(self, name=None):
+        # 部分一致検索
+        matches = [node for node in self.lives if name.lower() in node["name"].lower()]
+        
+        if not matches:
+            return ["指定された学名が見つかりませんでした"]
+    
+        # すべての一致したノードの祖先を収集
+        all_ancestors = []
+        for match in matches:
+            node = match
+            ancestors = []
+            while node["parent"] is not None and node["n"] != -1:
+                ancestors.append(node["name"])
+                node = self.life(n=node["parent"])
+            all_ancestors.append({
+                "name": match["name"],
+                "ancestors": ancestors[::-1]  # ルートから順序に
+            })
+    
+        return all_ancestors
+    '''
     # 先祖をたどる関数を追加
     def ancestor(self, name=None):
         node = self.life(name=name)
@@ -113,6 +136,7 @@ class TreeOfLife:
                 ancestors.append("親ノードが見つかりません")
                 break
         return ancestors
+        '''
 
 ToL = TreeOfLife()
 
@@ -133,28 +157,44 @@ def get_subtree():
 @app.route('/subtree', methods=['POST'])
 def get_subtree_on_click():
     data = request.get_json()
-    name = data['name']
+    n = data['n']
     # クリックされたノードを取得
-    clicknode = ToL.life(name=name)
-    newtree, _ = ToL.subtree(name=name, depth=4)
+    clicknode = ToL.life(n=n)
+    newtree, _ = ToL.subtree(n=n, depth=4)
 
     parent = ToL.life(n=clicknode['parent']) if clicknode['parent'] != -1 else None
-    return jsonify({"newtree": newtree, "parent": parent})
+    return jsonify({"newtree": newtree, "parent": parent})  # ここが遅い
 
 @app.route('/parentclick', methods=['POST'])
 def parentclick():
     data = request.get_json()
-    name = data['name']
+    n = data['n']
     # クリックされたノードを取得
-    clicknode = ToL.life(name=name)
+    clicknode = ToL.life(n=n)
 
     # 親ノードのツリーを深さ4まで取得
-    newtree, _ = ToL.subtree(name=name, depth=4)
+    newtree, _ = ToL.subtree(n=n, depth=4)
 
     # 親ノードを取得
     parent = ToL.life(n=clicknode['parent']) if clicknode['parent'] != -1 else None
 
     return jsonify({"newtree": newtree, "parent": parent})
+
+
+@app.route('/search', methods=['POST'])
+def search_nodes():
+    data = request.get_json()
+    query = data.get('query', '').lower()
+
+    # 条件: value >= 100 のノードのみ検索対象 + 部分一致 + 単語の先頭から一致
+    matches = [
+        node["name"] for node in ToL.lives
+        if query in [word.lower() for word in node["name"].split()]  # 完全一致
+        #if any(word.lower().startswith(query) for word in node["name"].split())  # 初め一致
+    ]
+    
+    return jsonify({"matches": matches})
+    
 
 @app.route('/ancestor', methods=['POST'])
 def get_ancestor():

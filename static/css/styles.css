@@ -1,0 +1,44 @@
+.arc text {
+    font: 10px sans-serif;
+    text-anchor: middle;
+}
+.arc path {
+    stroke: #fff;
+}
+.tooltip {
+    position: absolute;
+    visibility: hidden;
+    background: #fff;
+    border: 1px solid #ccc;
+    padding: 5px;
+    font-size: 12px;
+}
+.dimmed {
+    opacity: 0.4;
+}
+#barSvg {
+    pointer-events: none; /* 上層のSVGはポインターイベントを無効化 */
+}
+#copySvg {
+    pointer-events: none;
+}
+#barSvg rect {
+    pointer-events: auto; /* ドラッグ可能なバーは例外として有効 */
+}
+#searchDropdown {
+    max-height: 200px; /* 表示可能な最大高さ */
+    overflow-y: auto; /* 垂直方向にスクロールを有効化 */
+    position: absolute;
+    background: #fff;
+    border: 1px solid #ccc;
+    width: 20%; /* 入力欄の横幅の40% */
+    z-index: 1000; /* 他の要素より前面に表示 */
+}
+#searchDropdown div {
+    padding: 5px;
+    border-bottom: 1px solid #ddd;
+    cursor: pointer;
+}
+#searchDropdown div:hover {
+    background-color: #f0f0f0;
+}
