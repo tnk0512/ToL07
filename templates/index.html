@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>D3 Tree Partition with CIELab Colors</title>
+    <title>ToL VIS</title>
     <!-- CSSファイルを正しいパスで読み込む -->
     <link rel="stylesheet" href="../static/css/styles.css">
     <!-- 必要な外部スクリプト -->
@@ -14,32 +14,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/1.3.3/FileSaver.min.js"></script>
 </head>
 <body>
-    <div id="switchContainer">
-        <div>
-            <label>色の遷移: </label>
-            <input type="radio" name="colorChange" value="true">ON
-            <input type="radio" name="colorChange" value="false" checked>OFF
-        </div>
-        <div>
-            <label>アニメーション: </label>
-            <input type="radio" name="animation" value="true">ON
-            <input type="radio" name="animation" value="false" checked>OFF
-        </div>
-        <div>
-            <label>遷移スピード: </label>
-            <input type="radio" name="ease" value="true">Ease-InOut
-            <input type="radio" name="ease" value="false">線形
-        </div>
-        <div>
-            <label>色変化のタイミング: </label>
-            <input type="radio" name="timing" value="before">Before
-            <input type="radio" name="timing" value="after">After
-            <input type="radio" name="timing" value="synchro">同時
-        </div>
-        <button id="startButton" onclick="initializeGraph()">スタート</button>
-        <button id="resetButton" onclick="resetSelections()">リセット</button>
-    </div>
-
     <!-- サンバースト図関連要素 -->
     <div class="tooltip" style="opacity: 0;"></div>
     <div id="nodeCount">Nodes displayed: 0</div>
@@ -55,61 +29,19 @@
     <div id="ancestorDisplay" style="position: absolute; right: 20%; bottom: 20%; padding: 10px; width: 300px; height: auto;">先祖リスト: </div>
     <div id="ancestorMessage" style="position: absolute; right: 20%; bottom: 15%; padding: 10px; width: 300px; height: auto;"></div>
 
-    <!-- 動的スクリプト読み込みを含むJSファイル -->
+    <!-- Flaskから渡された設定データをスクリプトに埋め込む -->
     <script>
-        
-        function initializeGraph() {
-            // スイッチ状態を取得
-            const colorChange = document.querySelector('input[name="colorChange"]:checked').value === "true";
-            const animation = document.querySelector('input[name="animation"]:checked').value === "true";
-            const ease = document.querySelector('input[name="ease"]:checked');
-            const timing = document.querySelector('input[name="timing"]:checked');
-    
-            // エラーチェック
-            // 1. アニメーションがONの場合、遷移スピードが未選択ならエラー
-            if (animation && !ease) {
-                alert("アニメーションがONの時は、遷移スピードを選択してください。");
-                return; // 処理を中断
-            }
-    
-            // 2. 色変化のタイミングが選択されている場合の条件チェック
-            if (timing && !(colorChange && animation)) {
-                alert("色変化のタイミングは、色の遷移とアニメーションが両方ONの場合にのみ選択できます。");
-                return; // 処理を中断
-            }
+        window.graphConfig = {
+            colorChange: {{ colorChange|tojson }},
+            animation: {{ animation|tojson }},
+            ease: {{ ease|tojson }},
+            timing: {{ timing|tojson }},
+            topNode: {{ topNode|tojson }}
+        };
 
-            // 3. colorChange と animation が両方 true の場合、timing が未選択ならエラー
-            if (colorChange && animation && !timing) {
-                alert("色の遷移とアニメーションがONの時は、色変化のタイミングを選択してください。");
-                return; // 処理を中断
-            }
-    
-            // 設定を取得して保存
-            window.graphConfig = {
-                colorChange: colorChange,
-                animation: animation,
-                ease: ease ? (ease.value === "true") : false, // 未選択時はデフォルト値
-                timing: timing ? timing.value : null // 未選択時は null
-            };
-    
-            // スイッチを非表示
-            document.getElementById('switchContainer').style.display = 'none';
-    
-            // グラフ描画用スクリプトを読み込み
-            const script = document.createElement('script');
-            script.src = '../static/js/script.js'; // 適切なパスに変更
-            document.body.appendChild(script);
-        }
-
-        function resetSelections() {
-            // 初期状態にリセット
-            document.querySelector('input[name="colorChange"][value="false"]').checked = true;
-            document.querySelector('input[name="animation"][value="false"]').checked = true;
-    
-            // 色変化のタイミングは未選択に戻す
-            document.querySelectorAll('input[name="ease"]').forEach(input => input.checked = false);
-            document.querySelectorAll('input[name="timing"]').forEach(input => input.checked = false);
-        }
     </script>
+
+    <!-- 動的スクリプト読み込みを含むJSファイル -->
+    <script src="../static/js/script.js"></script>
 </body>
 </html>

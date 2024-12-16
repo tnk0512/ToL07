@@ -39,10 +39,11 @@ var mainSvgRect = mainSvgElement.getBoundingClientRect();
 
 // グラフ設定を大域変数から取得
 const config = window.graphConfig || {
-    colorChange: false,
-    animation: false,
+    colorChange: true,
+    animation: true,
     ease: false,
-    timing: null
+    timing: null,
+    topNode: null
 };
 
 // クリッピングパスを追加して、maxradius以上の領域が表示されないようにする
@@ -195,20 +196,161 @@ function updateLabels(nodes, arc) {
             return d.is_merged ? d.merge_count : d.name;
         });
     }
+// 初期化関数
+function initializeGraphWithTopNode(topNode) {
+    // 現在のグラフ情報から該当ノードを探索
+    let currentNode = null;
 
-// Load the initial data using AJAX POST request
+    svg.selectAll("path").each(function(d) {
+        if (d.n === topNode) {
+            currentNode = d; // 該当ノードを取得
+        }
+    });
+
+    if (!currentNode) {
+        console.error(`Node with n=${topNode} not found in the current tree.`);
+        return;
+    }
+
+    // `startAngle` と `endAngle` を元の木構造で計算
+    const startAngle = x(currentNode.x);
+    const endAngle = x(currentNode.x + currentNode.dx);
+    clicknodeDepth = currentNode.depth;
+
+    // 中心角度の計算
+    const opposingAngle = (startAngle + endAngle) / 2 - Math.PI;
+    offset -= opposingAngle; // クリックによるオフセットを調整
+
+    // ノード色のマップを作成
+    const colorMap = {};
+    svg.selectAll("path").each(function(d) {
+        colorMap[d.name] = d3.select(this).style("fill");
+    });
+
+    fetch('/subtree', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ n: topNode })
+    })
+    .then(response => response.json())
+    .then(data => {
+        const subtree = data.newtree;
+        const parentNode = data.parent;
+
+        // グラフを即座に更新
+        svg.selectAll("path").remove();
+        svg.selectAll("text").remove();
+
+        // 座標範囲をリセット
+        x.range([0, 2 * Math.PI]);
+        y.range([0, maxradius]);
+
+        const nodes = partition.nodes(subtree);
+
+        var overstartAngle = previousStartAngle + (previousEndAngle - previousStartAngle) * startAngle/(2*Math.PI);
+        var overendAngle = previousStartAngle + (previousEndAngle - previousStartAngle) * endAngle/(2*Math.PI);
+
+        // ノードの描画
+        const path = svg.selectAll("path").data(nodes).enter().append("path")
+            .attr("d", arc)
+            .attr("data-id", d => d.n)
+            .style("fill", function(d) {
+                if (config.colorChange) {
+                    return fillColor(d);
+                }
+                return colorMap[d.name] || computeNodeColor(d, d.depth+clicknodeDepth, overstartAngle, overendAngle);
+            })
+            .style("opacity", d => (d.is_merged ? 0.3 : 1));
+
+        // クリック可能なパスを設定
+        const clickablePaths = path.filter(d => {
+            const r = y(d.y + d.dy / 2);
+            const theta = x(d.x + d.dx) - x(d.x);
+            return r * theta >= sizeCriterion || d === d.parent;
+        });
+
+        clickablePaths.on("click", click)
+            .on("mouseover", mouseover)
+            .on("mouseout", mouseout);
+
+        previousStartAngle = overstartAngle; // 追加：前回の開始角度を保存
+        previousEndAngle = overendAngle; // 追加：前回の終了角度を保存
+        overviewX = d3.scale.linear().range([overstartAngle, overendAngle]);
+        overviewY = d3.scale.linear().range([
+            overmaxradius * clicknodeDepth / maxdepth,
+            overmaxradius * (clicknodeDepth + 4 < maxdepth ? clicknodeDepth + 4 : maxdepth) / maxdepth
+        ]);
+    
+        var overviewArc = d3.svg.arc()
+            .startAngle(function(d) { return Math.PI/2 - Math.max(0, Math.min(2 * Math.PI, overviewX(d.x))); })
+            .endAngle(function(d) { return Math.PI/2 - Math.max(0, Math.min(2 * Math.PI, overviewX(d.x + d.dx))); })
+            .innerRadius(function(d) { return Math.max(0, overviewY(d.y)); })
+            .outerRadius(function(d) { return Math.max(0, overviewY(d.y + d.dy)); });
+    
+        var overviewSvg = d3.select("#overview").select("svg").select("g");
+    
+        overviewSvg.selectAll("path").remove();
+    
+        overviewSvg.selectAll("path")
+            .data(nodes)
+            .enter().append("path")
+            .attr("d", overviewArc)
+            .style("fill", function(d) {
+                const mainPath = svg.select(`path[data-id="${d.n}"]`);
+                if (!mainPath.empty()) {
+                    d.overviewColor = mainPath.style("fill");
+                    return d.overviewColor;
+                }
+            });
+    
+        //previousTopNode = d;
+
+        // ラベルを再描画
+        svg.selectAll("text")
+            .data(nodes.filter(d => {
+                const r = y(d.y + d.dy / 2);
+                const theta = x(d.x + d.dx) - x(d.x);
+                return r * theta >= labelCriterion; // ラベル表示基準を満たすノードのみ
+            }))
+            .enter().append("text")
+            .attr("transform", d => "translate(" + arc.centroid(d) + ")")
+            .attr("text-anchor", "middle")
+            .attr("font-size", "10px")
+            .text(d => d.name);
+
+        //previousClickDepth = clicknodeDepth;
+        // ドラッグバーを追加
+        var drag = initializeDrag(nodes, arc, parentNode); // ドラッグ設定を適用
+        draggableBar.call(drag); // ドラッグバーに適用
+    
+        // ラベル再描画
+        updateLabels(nodes, arc);
+        updateNodeCount(nodes);
+    })
+    .catch(error => console.error("Error fetching subtree:", error));
+}
+// 初期データを `/data` エンドポイントから取得し、描画
 fetch('/data', {
     method: 'POST',
     headers: {
         'Content-Type': 'application/json',
-    }
-    })
+    },
+    body: JSON.stringify({ n: config.topNode }),
+})
     .then(response => response.json())
     .then(data => {
-    var root = data.life;
-    var leafNodes = data.leaf_nodes;
-    drawChart(root);
-    });
+        const root = data.life;
+        const leafNodes = data.leaf_nodes;
+
+        // 初期グラフ描画
+        drawChart(root);
+
+        // `topNode` が指定されている場合に特定のサブツリーを取得して描画
+        if (config.topNode) {
+            initializeGraphWithTopNode(config.topNode);
+        }
+    })
+    .catch(error => console.error("Error fetching initial data:", error));
     
 function drawChart(root) {
     var nodes = partition.nodes(root);
@@ -553,43 +695,8 @@ function click(d) {
                     })
                     .style("opacity", d => (d.is_merged ? 0.3 : 1));
             }
-
-            function finalizeUpdate(nodes, parentNode) {
-                if (parentNode) {
-                    parentNode.depth = 0;
-                    parentNode.x = 0;
-                    parentNode.dx = 1;
-                    parentNode.y = 0;
-                    parentNode.dy = 1;
-            
-                    const parentY = d3.scale.linear().range([0, 20]);
-                    svg.append("path")
-                        .datum(parentNode)
-                        .attr("class", "parentNodeArc")
-                        .attr("d", d => {
-                            const arcParent = d3.svg.arc()
-                                .startAngle(d => Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))))
-                                .endAngle(d => Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))))
-                                .innerRadius(d => Math.max(0, parentY(d.y)))
-                                .outerRadius(d => Math.max(0, parentY(d.y + d.dy)));
-                            return arcParent(d);
-                        })
-                        .style("fill", "gray")
-                        .style("opacity", 0.5)
-                        .on("click", click)
-                        .on("mouseover", mouseover)
-                        .on("mouseout", mouseout);
-                }
-                // ドラッグバーを追加
-                var drag = initializeDrag(nodes, arc, parentNode); // ドラッグ設定を適用
-                draggableBar.call(drag); // ドラッグバーに適用
-            
-                // ラベル再描画
-                updateLabels(nodes, arc);
-                updateNodeCount(nodes);
-            }
-        
     } else {
+        // ノードクリック
         if (config.animation) {
             // 動的に dispatch のステップを生成
             var depthSteps = [];
@@ -729,37 +836,8 @@ function click(d) {
                 .attr("font-size", "10px")
                 .text(d => d.name);
     
-            var drag = initializeDrag(nodes, arc, parentNode); // ドラッグ設定を適用
-            draggableBar.call(drag); // ドラッグ可能なバーに適用
-            updateNodeCount(nodes);
             previousClickDepth = clicknodeDepth;
-
-            if (parentNode) {
-                parentNode.depth = 0;
-                parentNode.x = 0;
-                parentNode.dx = 1;
-                parentNode.y = 0;
-                parentNode.dy = 1;
-
-                var parentY = d3.scale.linear().range([0, 20]);
-
-                var parentPath = svg.append("path")
-                    .datum(parentNode)
-                    .attr("class", "parentNodeArc")
-                    .attr("d", function(d) {
-                        var arcParent = d3.svg.arc()
-                            .startAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))); })
-                            .endAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))); })
-                            .innerRadius(function(d) { return Math.max(0, parentY(d.y)); })
-                            .outerRadius(function(d) { return Math.max(0, parentY(d.y + d.dy)); });
-                        return arcParent(d);
-                    })
-                    .style("fill", "gray")
-                    .style("opacity", 0.5) // 親ノードは不透明
-                    .on("click", click)
-                    .on("mouseover", mouseover)
-                    .on("mouseout", mouseout);
-            }
+            finalizeUpdate(nodes, parentNode)
         })}
     }
     
@@ -917,6 +995,12 @@ function click(d) {
                 .transition()
                 .duration(5000)
                 .style("opacity", 0);
+
+                // トランジション中はクリックとホバーを無効化
+                svg.selectAll("path")
+                    .on("click", null)
+                    .on("mouseover", null)
+                    .on("mouseout", null);
             
                 svg.transition()
                     //.delay(4000)
@@ -952,38 +1036,7 @@ function click(d) {
                                         return fillColor(d);
                                     })
                             }
-                            updateNodeCount(nodes);
-                            if (parentNode) {
-                                parentNode.depth = 0;
-                                parentNode.x = 0;
-                                parentNode.dx = 1;
-                                parentNode.y = 0;
-                                parentNode.dy = 1;
-                
-                                var parentY = d3.scale.linear().range([0, 20]);
-                
-                                var parentPath = svg.append("path")
-                                    .datum(parentNode)
-                                    .attr("class", "parentNodeArc")
-                                    .attr("d", function(d) {
-                                        var arcParent = d3.svg.arc()
-                                            .startAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))); })
-                                            .endAngle(function(d) { return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))); })
-                                            .innerRadius(function(d) { return Math.max(0, parentY(d.y)); })
-                                            .outerRadius(function(d) { return Math.max(0, parentY(d.y + d.dy)); });
-                                        return arcParent(d);
-                                    })
-                                    .style("fill", "gray")
-                                    .style("opacity", 0.5) // 親ノードは不透明
-                                    .on("click", click)
-                                    .on("mouseover", mouseover)
-                                    .on("mouseout", mouseout);
-                            }
-                
-                            var drag = initializeDrag(nodes, arc, parentNode); // ドラッグ設定を適用
-                            draggableBar.call(drag); // ドラッグ可能なバーに適用
-                
-                            updateLabels(nodes, arc); // ラベルを初期描画
+                            finalizeUpdate(nodes, parentNode)
                 
                             // 次のノードの startAngle と endAngle を求める
                             var nextStartAngle, nextEndAngle;
@@ -997,6 +1050,11 @@ function click(d) {
                 
                             // 次のステップ（固定の step イベント）を呼び出し
                             dispatch.step(nextStartAngle, nextEndAngle);
+                            // トランジション終了後にクリックとホバーを再有効化
+                            svg.selectAll("path")
+                                .on("click", click)
+                                .on("mouseover", mouseover)
+                                .on("mouseout", mouseout);
                         }
                     });
 
@@ -1006,6 +1064,40 @@ function click(d) {
             //console.log(`${d.name}クリック後の深さ：${previousClickDepth}`);
         })
         .catch(error => console.error("Error fetching subtree data:", error));
+        }
+        function finalizeUpdate(nodes, parentNode) {
+            if (parentNode) {
+                parentNode.depth = 0;
+                parentNode.x = 0;
+                parentNode.dx = 1;
+                parentNode.y = 0;
+                parentNode.dy = 1;
+        
+                const parentY = d3.scale.linear().range([0, 20]);
+                svg.append("path")
+                    .datum(parentNode)
+                    .attr("class", "parentNodeArc")
+                    .attr("d", d => {
+                        const arcParent = d3.svg.arc()
+                            .startAngle(d => Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x))))
+                            .endAngle(d => Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))))
+                            .innerRadius(d => Math.max(0, parentY(d.y)))
+                            .outerRadius(d => Math.max(0, parentY(d.y + d.dy)));
+                        return arcParent(d);
+                    })
+                    .style("fill", "gray")
+                    .style("opacity", 0.5)
+                    .on("click", click)
+                    .on("mouseover", mouseover)
+                    .on("mouseout", mouseout);
+            }
+            // ドラッグバーを追加
+            var drag = initializeDrag(nodes, arc, parentNode); // ドラッグ設定を適用
+            draggableBar.call(drag); // ドラッグバーに適用
+        
+            // ラベル再描画
+            updateLabels(nodes, arc);
+            updateNodeCount(nodes);
         }
     }
 // mainSvg の内容を copySvg にコピーする関数

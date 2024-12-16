@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, render_template
 import json
 import copy
 from pathlib import Path
+import random
 
 app = Flask(__name__)
 
@@ -117,42 +118,55 @@ class TreeOfLife:
             })
     
         return all_ancestors
-    '''
-    # 先祖をたどる関数を追加
-    def ancestor(self, name=None):
-        node = self.life(name=name)
-        ancestors = []
-
-        # ノードが存在しない場合のチェック
-        if node is None:
-            return ["指定された学名が見つかりませんでした"]
-
-        # 先祖をたどるループ
-        while node["parent"] is not None and node["n"] != -1:
-            ancestors.append(node["name"])
-            node = self.life(n=node["parent"])
-            # ルートノードや親ノードが見つからない場合のエラーチェック
-            if node is None:
-                ancestors.append("親ノードが見つかりません")
-                break
-        return ancestors
-        '''
 
 ToL = TreeOfLife()
+selected_node = 2429906  # グローバル変数で初期値を設定
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+@app.route('/ToL')
+def render_tree():
+    # URLパラメータを取得
+    color_change = request.args.get('colorChange', 'true').lower() == 'true'
+    animation = request.args.get('animation', 'true').lower() == 'true'
+    ease = request.args.get('ease', 'false').lower() == 'true'
+    timing = request.args.get('timing', None)
+    depth = request.args.get('depth', None)
+
+    # サブツリーの初期ノードをランダムに選択
+    if depth:
+        depth = int(depth)
+        _, lst = ToL.subtree(name="Biota", depth=depth)
+        
+        if depth>2:
+            # 偏りを持たせるためにウェイトを設定
+            weights = [1 / (i + 1) for i in range(len(lst))]  # 例: ノードインデックスが小さいほど高い確率
+            selected_node = random.choices(lst, weights=weights, k=1)[0]
+        else:
+            # 一様分布の場合
+            selected_node = random.choice(lst)
+    else:
+        selected_node = 2429906  # デフォルト値
+
+    return render_template(
+        'index.html',
+        colorChange=color_change,
+        animation=animation,
+        ease=ease,
+        timing=timing,
+        topNode=selected_node
+    )
 
 @app.route('/data', methods=['POST'])
 def get_subtree():
-    #n = -1
-    name = 'Biota' # ここを変える！！Biotaか1
+    data = request.get_json()
+    selected_node = data.get('n', 2429906)  # デフォルト値を設定
+    #selected_node = request.args.get('topNode', 2429906)
+    print(f'選ばれたノード2：{selected_node}')
     depth = 4
-    #subtree, leaf_nodes = ToL.subtree(n=n, depth=depth)
-    subtree, leaf_nodes = ToL.subtree(name=name, depth=depth)
+    subtree, leaf_nodes = ToL.subtree(n=2429906, depth=depth)
+    # subtree, leaf_nodes = ToL.subtree(name=name, depth=depth)
 
     return jsonify({"life": subtree, "leaf_nodes": leaf_nodes})
+    
 
 @app.route('/subtree', methods=['POST'])
 def get_subtree_on_click():
@@ -164,6 +178,24 @@ def get_subtree_on_click():
 
     parent = ToL.life(n=clicknode['parent']) if clicknode['parent'] != -1 else None
     return jsonify({"newtree": newtree, "parent": parent})  # ここが遅い
+
+@app.route('/ToL/top', methods=['GET'])
+def get_subtree_by_top():
+    # URLパラメータで指定されたノード名を取得
+    top_node_name = request.args.get('top', None)
+    if not top_node_name:
+        return jsonify({"error": "Top node not specified"}), 400
+
+    # ノード名から対応するサブツリーを取得
+    try:
+        top_node = ToL.find_by_name(top_node_name)
+        if not top_node:
+            return jsonify({"error": "Top node not found"}), 404
+
+        newtree, _ = ToL.subtree(n=top_node['id'], depth=4)
+        return jsonify({"newtree": newtree, "topNode": top_node})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/parentclick', methods=['POST'])
 def parentclick():
