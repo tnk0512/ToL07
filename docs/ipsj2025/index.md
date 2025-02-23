@@ -16,7 +16,7 @@ author: "田中　愛万音、脇田　建"
 ## デモビデオ
 =======
 ### デモビデオ1
-![デモ1](./ipsj_demo1.gif)
+<img src="./ipsj_demo1.gif" style="width: 80%; max-width: 1000px;">
 
 ### デモビデオ2
 ![デモ2](./ipsj_demo2.gif)
