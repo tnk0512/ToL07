@@ -16,26 +16,13 @@ author: "田中　愛万音、脇田　建"
 ## デモビデオ
 =======
 ### デモビデオ1
-<video width="600" controls>
-  <source src="./ipsj_demo1.gif" type="video/quicktime">
-  お使いのブラウザは動画をサポートしていません。
-</video>
+![デモ1](./ipsj_demo1.gif)
 
 ### デモビデオ2
-<video width="600" controls>
-  <source src="./ipsj_demo2.mov" type="video/quicktime">
-  お使いのブラウザは動画をサポートしていません。
-</video>
+![デモ2](./ipsj_demo1.gif)
 
 ### デモビデオ3
-<video width="600" controls>
-  <source src="./ipsj_demo3.mov" type="video/quicktime">
-  お使いのブラウザは動画をサポートしていません。
-</video>
+![デモ3](./ipsj_demo1.gif)
 
 ### デモビデオ4
-<video width="600" controls>
-  <source src="./ipsj_demo4.mov" type="video/quicktime">
-  お使いのブラウザは動画をサポートしていません。
-</video>
->>>>>>> a8e6d3d (Add index.md and demo videos)
+![デモ4](./ipsj_demo1.gif)
