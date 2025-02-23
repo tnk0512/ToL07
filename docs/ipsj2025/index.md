@@ -14,14 +14,4 @@ author: "田中　愛万音、脇田　建"
 ## 概要
 
 ## デモビデオ
-### デモビデオ1
-<video width="600" controls>
-  <source src="./ipsj_demo1.mov" type="video/quicktime">
-  お使いのブラウザは動画をサポートしていません。
-</video>
 
-### デモビデオ2
-<video width="600" controls>
-  <source src="./ipsj_demo2.mov" type="video/quicktime">
-  お使いのブラウザは動画をサポートしていません。
-</video>
