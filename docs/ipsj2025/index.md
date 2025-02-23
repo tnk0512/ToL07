@@ -19,10 +19,10 @@ author: "田中　愛万音、脇田　建"
 ![デモ1](./ipsj_demo1.gif)
 
 ### デモビデオ2
-![デモ2](./ipsj_demo1.gif)
+![デモ2](./ipsj_demo2.gif)
 
 ### デモビデオ3
-![デモ3](./ipsj_demo1.gif)
+![デモ3](./ipsj_demo3.gif)
 
 ### デモビデオ4
-![デモ4](./ipsj_demo1.gif)
+![デモ4](./ipsj_demo4.gif)
