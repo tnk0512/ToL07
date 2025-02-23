@@ -29,17 +29,17 @@ author: "田中　愛万音、脇田　建"
 - 哺乳類には
     - げっ歯類、偶蹄目、霊長類、食肉目 などが含まれていることがわかります。
 
-<img src="./ipsj_demo2.gif" width="800px">
+<img src="./ipsj_demo2.gif" style="width: 150%; max-width: 1000px;">
 
 ### デモビデオ3
 
 - 霊長類を押してみます
 - 画像のクリック、また検索機能から指定のノードまでのパスがハイライトされます。
 
-![デモ3](./ipsj_demo3.gif)
+<img src="./ipsj_demo3.gif" style="width: 150%; max-width: 1000px;">
 
 ### デモビデオ4
 
 - ヒトと、ゴリラと、チンパンジーは分類学的に近しい親戚なのです。
 
-![デモ4](./ipsj_demo4.gif)
+<img src="./ipsj_demo4.gif" style="width: 150%; max-width: 1000px;">
