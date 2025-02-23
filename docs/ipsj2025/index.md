@@ -19,17 +19,13 @@ author: "田中　愛万音、脇田　建"
 
 - 4層目をクリックし、4段階のアニメーションが始まります。
 
-<img src="./ipsj_demo1.gif" style="width: 150%; max-width: 1000px;">
-
-### デモビデオ2
+<img src="./ipsj_demo.gif" style="width: 150%; max-width: 1000px;">
 
 - 四肢動物には
     - 両生類、鳥類、哺乳類、爬虫類 などが含まれていることがわかります。
 - ビデオ1の最終形態から、3層目の哺乳類をクリックします。
 - 哺乳類には
     - げっ歯類、偶蹄目、霊長類、食肉目 などが含まれていることがわかります。
-
-<img src="./ipsj_demo2.gif" style="width: 150%; max-width: 1000px;">
 
 ### デモビデオ3
 
