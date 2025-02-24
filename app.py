@@ -3,6 +3,7 @@ import json
 import copy
 from pathlib import Path
 import random
+import pandas as pd
 
 app = Flask(__name__)
 
@@ -97,12 +98,19 @@ class TreeOfLife:
         return dict(zip(ns, [self.subtree(n=n, depth=depth) for n in ns]))
     
     # 先祖をたどる関数を部分一致に対応
-    def ancestor(self, name=None):
-        # 部分一致検索
-        matches = [node for node in self.lives if name.lower() in node["name"].lower()]
-        
+    # 先祖をたどる関数（部分一致検索 + `n` 検索に対応）
+    def ancestor(self, name=None, n=None):
+        matches = []
+    
+        if name:
+            # 部分一致検索（name）
+            matches = [node for node in self.lives if name.lower() in node["name"].lower()]
+        elif n:
+            # 完全一致検索（n）
+            matches = [node for node in self.lives if str(node["n"]) == str(n)]
+    
         if not matches:
-            return ["指定された学名が見つかりませんでした"]
+            return ["指定された学名またはIDが見つかりませんでした"]
     
         # すべての一致したノードの祖先を収集
         all_ancestors = []
@@ -111,13 +119,15 @@ class TreeOfLife:
             ancestors = []
             while node["parent"] is not None and node["n"] != -1:
                 ancestors.append(node["name"])
-                node = self.life(n=node["parent"])
+                node = self.life(n=node["parent"])  # 親ノードを取得
             all_ancestors.append({
                 "name": match["name"],
+                "n": match["n"],
                 "ancestors": ancestors[::-1]  # ルートから順序に
             })
     
         return all_ancestors
+
 
 ToL = TreeOfLife()
 selected_node = 2429906  # グローバル変数で初期値を設定
@@ -126,10 +136,13 @@ selected_node = 2429906  # グローバル変数で初期値を設定
 def render_tree():
     # URLパラメータを取得
     color_change = request.args.get('colorChange', 'true').lower() == 'true'
-    animation = request.args.get('animation', 'true').lower() == 'true'
+    animation = request.args.get('animation', 'false').lower() == 'true'
     ease = request.args.get('ease', 'false').lower() == 'true'
     timing = request.args.get('timing', None)
     depth = request.args.get('depth', None)
+    task = request.args.get('task', None)
+    tasknum = request.args.get('tasknum', random.randint(0, 39))
+    taskMode = depth is not None or task is not None
 
     # サブツリーの初期ノードをランダムに選択
     if depth:
@@ -152,7 +165,12 @@ def render_tree():
         animation=animation,
         ease=ease,
         timing=timing,
-        topNode=selected_node
+        topNode=selected_node,
+        interaction='true',
+        taskMode=taskMode,
+        task=task,
+        tasknum=tasknum,
+        score=0
     )
 
 @app.route('/data', methods=['POST'])
@@ -160,7 +178,6 @@ def get_subtree():
     data = request.get_json()
     selected_node = data.get('n', 2429906)  # デフォルト値を設定
     #selected_node = request.args.get('topNode', 2429906)
-    print(f'選ばれたノード2：{selected_node}')
     depth = 4
     subtree, leaf_nodes = ToL.subtree(n=2429906, depth=depth)
     # subtree, leaf_nodes = ToL.subtree(name=name, depth=depth)
@@ -172,6 +189,7 @@ def get_subtree():
 def get_subtree_on_click():
     data = request.get_json()
     n = data['n']
+    print(f'{n}の木を表示')
     # クリックされたノードを取得
     clicknode = ToL.life(n=n)
     newtree, _ = ToL.subtree(n=n, depth=4)
@@ -196,6 +214,32 @@ def get_subtree_by_top():
         return jsonify({"newtree": newtree, "topNode": top_node})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/load_task_data', methods=['GET'])
+def load_task_data():
+    # URLパラメータからタスク種類を取得
+    task_type = request.args.get('task', None)
+    if not task_type:
+        return jsonify({"error": "Task type is not specified"}), 400
+
+    # タスク種類に応じてCSVを選択
+    csv_file_map = {
+        "size1": "static/data/test/size1.csv",
+        "size2": "static/data/test/size2.csv",
+        "size3": "static/data/test/size3.csv",
+        "size4": "static/data/test/size4.csv",
+        "hierarchical": "static/data/test/hierarchy.csv",
+    }
+
+    if task_type not in csv_file_map:
+        return jsonify({"error": f"Invalid task type: {task_type}"}), 400
+
+    try:
+        # CSVファイルを読み込む
+        task_data = pd.read_csv(csv_file_map[task_type])
+        return jsonify(task_data.to_dict(orient='records'))
+    except Exception as e:
+        return jsonify({"error": f"Failed to load task data: {str(e)}"}), 500
 
 @app.route('/parentclick', methods=['POST'])
 def parentclick():
@@ -232,8 +276,18 @@ def search_nodes():
 def get_ancestor():
     data = request.get_json()
     name = data.get('name')
-    ancestors = ToL.ancestor(name)
+    node_id = data.get('n')
+
+    if name:
+        ancestors = ToL.ancestor(name=name)
+    elif node_id:
+        ancestors = ToL.ancestor(n=node_id)
+
+    else:
+        return jsonify({"error": "無効なリクエスト"}), 400
+
     return jsonify({"ancestors": ancestors})
+
 
 if __name__ == '__main__':
     app.run(debug=True)

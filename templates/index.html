@@ -20,23 +20,50 @@
     <div id="overview" style="position: absolute; top: 100px; right: 10px; width: 200px; height: 200px; border: 1px solid #ccc;">
         <canvas id="overviewCanvas" width="200" height="200"></canvas>
     </div>
-    <div id="pathDisplay" style="position: absolute; right: 20%; top: 20%; padding: 10px; width: 300px; height: auto;">クリックノードのルートからのパス: </div>
+    <div id="pathDisplay" style="position: absolute; right: 15%; top: 20%; padding: 10px; width: 200px; height: auto;">Path from the root of the Click node: </div>
+
     <div>
         <input type="text" id="searchInput" placeholder="学名を入力">
         <button onclick="fetchSearchCandidates()">検索</button>
         <div id="searchDropdown" style="display: none;"></div>
     </div>
-    <div id="ancestorDisplay" style="position: absolute; right: 20%; bottom: 20%; padding: 10px; width: 300px; height: auto;">先祖リスト: </div>
-    <div id="ancestorMessage" style="position: absolute; right: 20%; bottom: 15%; padding: 10px; width: 300px; height: auto;"></div>
+    <div id="info-panel">
+        <h3 id="node-name"></h3>
+        <img id="node-image" src="" alt="" style="width: 100%; height: auto; display: none;">
+        <div id="grid-container" style="display: grid; gap: 5px;"></div>
+        <p><a id="node-wiki" href="" target="_blank" style="display: none;">Wikipediaへ</a></p>
+    </div>     
+    <div id="ancestorDisplay" style="position: absolute; right: 10%; bottom: 20%; padding: 10px; width: 300px; height: auto;">Ancestors of Searched node: </div>
+    <div id="ancestorMessage" style="position: absolute; right: 35%; bottom: 15%; padding: 10px; width: 300px; height: auto;"></div>
+    <div id="questionArea" style="position: fixed; top: 20px; right: 20px; width: 300px; padding: 10px; border: 1px solid #ccc; background: #f9f9f9; display: {{ 'block' if taskMode else 'none' }};">
+        <h3>
+            質問
+            <span id="questionCounter" style="font-size: 14px; color: #555; margin-left: 10px;"></span>
+        </h3>
+        <p id="questionText">ここに質問が表示されます。</p>
+        <div id="answerArea">
+            <!-- 解答欄がここに動的に追加されます -->
+        </div>
+    </div>
+    
+    
+    <button id="nextButton" style="position: fixed; bottom: 20px; right: 20px; display: {{ 'block' if taskMode else 'none' }};">次へ</button>
+
 
     <!-- Flaskから渡された設定データをスクリプトに埋め込む -->
     <script>
+        //config 作る
         window.graphConfig = {
             colorChange: {{ colorChange|tojson }},
             animation: {{ animation|tojson }},
             ease: {{ ease|tojson }},
             timing: {{ timing|tojson }},
-            topNode: {{ topNode|tojson }}
+            topNode: {{ topNode|tojson }},
+            interaction: {{ interaction|tojson }},
+            taskMode: {{ taskMode|tojson }},
+            task: {{ task|tojson }},
+            tasknum: {{ tasknum|tojson }},
+            score: {{ score|tojson }}
         };
 
     </script>

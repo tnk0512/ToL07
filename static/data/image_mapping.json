@@ -1,0 +1,366 @@
+{
+    "2191411": {
+        "image": "Actinopterygii.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Actinopterygii",
+        "alt": "Actinopterygii",
+        "name_en": "Ray-finned fish",
+        "name_jp": "条鰭類"
+    },
+    "2435663": {
+        "multiple_images": [1527042, 1529099, 1571475, 1571538, 1549870],
+        "wiki": "https://en.wikipedia.org/wiki/Tetrapod",
+        "grid_columns": 2,
+        "grid_rows": 3,
+        "name_en": "Tetrapods",
+        "name_jp": "四肢動物"
+    },
+    "1528163": {
+        "multiple_images": [1527042, 1529098, 1529099],
+        "wiki": "https://en.wikipedia.org/wiki/Amphibian",
+        "grid_columns": 1,
+        "grid_rows": 3,
+        "name_en": "Amphibian",
+        "name_jp": "両生類"
+    },
+    "1527991": {
+        "multiple_images": [1527042, 1529507, 1525471],
+        "wiki": "https://en.wikipedia.org/wiki/Frog",
+        "grid_columns": 1,
+        "grid_rows": 3,
+        "name_en": "Frog",
+        "name_jp": "カエル"
+    },
+    "1527042": {
+        "image": "Hyla.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Hyla",
+        "alt": "Hyla",
+        "name_en": "Hyla",
+        "name_jp": "アマガエル属"
+    },
+    "1529507": {
+        "image": "Gastrophryne_carolinensis.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Gastrophryne_carolinensis",
+        "alt": "Gastrophryne carolinensis",
+        "name_en": "Eastern Narrow-mouthed Toad",
+        "name_jp": "ガストロフリネ・カロリネンシス"
+    },
+    "1525471": {
+        "image": "Anaxyru_americanus.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/American_toad",
+        "alt": "Anaxyru americanus",
+        "name_en": "American Toad",
+        "name_jp": "アメリカヒキガエル"
+    },
+    "1525882": {
+        "multiple_images": [1527708, 1526734, 1529098],
+        "wiki": "https://en.wikipedia.org/wiki/Notophthalmus",
+        "grid_columns": 1,
+        "grid_rows": 3,
+        "name_en": "Notophthalmus",
+        "name_jp": "ノトフタルムス属"
+    },
+    "1527708": {
+        "image": "Notophthalmus_perstriatus.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Striped_newt",
+        "alt": "Notophthalmus perstriatus",
+        "name_en": "Striped Newt",
+        "name_jp": "シマイモリ"
+    },
+    "1526734": {
+        "image": "Notophthalmus_meridionalis.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Notophthalmus_meridionalis",
+        "alt": "Notophthalmus meridionalis",
+        "name_en": "Southern Newt",
+        "name_jp": "南部イモリ"
+    },
+    "1529098": {
+        "image": "Notophthalmus_viridescens.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Eastern_newt",
+        "alt": "Notophthalmus viridescens",
+        "name_en": "Eastern Newt",
+        "name_jp": "アカイモリ"
+    },
+    "1529099": {
+        "image": "Dermophis_mexicanus.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Dermophis_mexicanus",
+        "alt": "Dermophis mexicanus",
+        "name_en": "Mexican Caecilian",
+        "name_jp": "メキシコ無足類"
+    },
+    "1571120": {
+        "multiple_images": [1571475, 1568775, 1578440, 1577678, 1573401, 1571121, 1572378],
+        "wiki": "https://en.wikipedia.org/wiki/Mammal",
+        "grid_columns": 2,
+        "grid_rows": 4,
+        "name_en": "Mammal",
+        "name_jp": "哺乳類"
+    },
+    "1571475": {
+        "image": "Didelphis_virginiana.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Virginia_opossum",
+        "alt": "Didelphis virginiana",
+        "name_en": "Virginia Opossum",
+        "name_jp": "バージニアオポッサム"
+    },
+    "1568775": {
+        "image": "Osphranter_rufus.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Red_kangaroo",
+        "alt": "Osphranter rufus",
+        "name_en": "Red Kangaroo",
+        "name_jp": "アカカンガルー"
+    },
+    "1574471": {
+        "multiple_images": [1578440],
+        "wiki": "https://en.wikipedia.org/wiki/Bat",
+        "grid_columns": 1,
+        "grid_rows": 1,
+        "name_en": "Bat",
+        "name_jp": "コウモリ"
+    },
+    "1578440": {
+        "image": "Rousettus_aegyptiacus.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Egyptian_fruit_bat",
+        "alt": "Rousettus aegyptiacus",
+        "name_en": "Egyptian Fruit Bat",
+        "name_jp": "エジプトオオコウモリ"
+    },
+    "1575441": {
+        "multiple_images": [1577678, 1577252, 1572453],
+        "wiki": "https://en.wikipedia.org/wiki/Artiodactyl",
+        "grid_columns": 1,
+        "grid_rows": 3,
+        "name_en": "Artiodactyl",
+        "name_jp": "偶蹄目"
+    },
+    "1577678": {
+        "image": "Cervus_nippon.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Sika_deer",
+        "alt": "Cervus nippon",
+        "name_en": "Sika Deer",
+        "name_jp": "ニホンジカ"
+    },
+    "1577252": {
+        "image": "Bos_taurus.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Cattle",
+        "alt": "Bos taurus",
+        "name_en": "Cattle",
+        "name_jp": "ウシ"
+    },
+    "1572453": {
+        "image": "Sus_scrofa.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Wild_boar",
+        "alt": "Sus scrofa",
+        "name_en": "Wild Boar",
+        "name_jp": "イノシシ"
+    },
+    "1573401": {
+        "image": "Halichoerus_grypus.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Grey_seal",
+        "alt": "Halichoerus grypus",
+        "name_en": "Grey Seal",
+        "name_jp": "ゼニガタアザラシ"
+    },
+    "1568406": {
+        "multiple_images": [1571121, 1578905, 1571909],
+        "wiki": "https://en.wikipedia.org/wiki/Rodent",
+        "grid_columns": 1,
+        "grid_rows": 3,
+        "name_en": "Rodent",
+        "name_jp": "げっ歯類"
+    },
+    "1571121": {
+        "image": "Hydrochoerus_hydrochaeris.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Capybara",
+        "alt": "Hydrochoerus hydrochaeris",
+        "name_en": "Capybara",
+        "name_jp": "カピバラ"
+    },
+    "1578905": {
+        "image": "Tamias_striatus.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Eastern_chipmunk",
+        "alt": "Tamias striatus",
+        "name_en": "Eastern Chipmunk",
+        "name_jp": "シマリス"
+    },
+    "1571909": {
+        "image": "Mus_musculus.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/House_mouse",
+        "alt": "Mus musculus",
+        "name_en": "House Mouse",
+        "name_jp": "ハツカネズミ"
+    },
+    "1575760": {
+        "multiple_images": [1569866, 1566629, 1574369, 1576323, 1572378],
+        "wiki": "https://en.wikipedia.org/wiki/Primate",
+        "grid_columns": 2,
+        "grid_rows": 3,
+        "name_en": "Primate",
+        "name_jp": "霊長類"
+    },
+    "1569866": {
+        "image": "Lemur_catta.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Ring-tailed_lemur",
+        "alt": "Lemur catta",
+        "name_en": "Ring-tailed Lemur",
+        "name_jp": "ワオキツネザル"
+    },
+    "1566629": {
+        "image": "Pan_troglodytes.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Chimpanzee",
+        "alt": "Pan troglodytes",
+        "name_en": "Chimpanzee",
+        "name_jp": "チンパンジー"
+    },
+    "1574369": {
+        "image": "Gorilla_gorilla.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Western_gorilla",
+        "alt": "Gorilla gorilla",
+        "name_en": "Western Gorilla",
+        "name_jp": "ニシローランドゴリラ"
+    },
+    "1576323": {
+        "image": "Homo_sapiens.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Human",
+        "alt": "Homo sapiens",
+        "name_en": "Human",
+        "name_jp": "人間"
+    },
+    "1572378": {
+        "image": "Macaca_fuscata.jpeg",
+        "wiki": "https://en.wikipedia.org/wiki/Japanese_macaque",
+        "alt": "Macaca fuscata",
+        "name_en": "Japanese Macaque",
+        "name_jp": "ニホンザル"
+    },
+    "1578394": {
+        "multiple_images": [
+            1567895, 1571538, 1577437, 1574042,
+            1568327, 1574831, 1566932, 1572084, 1577634, 1566328
+        ],
+        "wiki": "https://en.wikipedia.org/wiki/Carnivora",
+        "grid_columns": 2,
+        "grid_rows": 5,
+        "name_en": "Carnivora",
+        "name_jp": "食肉目"
+    },
+    "1578901": {
+        "image": "leo.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Lion",
+        "alt": "Lion",
+        "name_en": "Lion",
+        "name_jp": "ライオン"
+    },
+    "1567895": {
+        "image": "Cheetah.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Cheetah",
+        "alt": "Cheetah",
+        "name_en": "Cheetah",
+        "name_jp": "チーター"
+    },
+    "1571538": {
+        "image": "Brownbear.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Brown_bear",
+        "alt": "Brown Bear",
+        "name_en": "Brown Bear",
+        "name_jp": "ヒグマ"
+    },
+    "1577437": {
+        "image": "Spotted_Hyaena.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Spotted_hyena",
+        "alt": "Spotted Hyena",
+        "name_en": "Spotted Hyena",
+        "name_jp": "ブチハイエナ"
+    },
+    "1574042": {
+        "image": "Wolf.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Wolf",
+        "alt": "Wolf",
+        "name_en": "Wolf",
+        "name_jp": "オオカミ"
+    },
+    "1568327": {
+        "image": "Binturong.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Binturong",
+        "alt": "Binturong",
+        "name_en": "Binturong",
+        "name_jp": "ビントロング"
+    },
+    "1574831": {
+        "image": "Raccoon.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Raccoon",
+        "alt": "Raccoon",
+        "name_en": "Raccoon",
+        "name_jp": "アライグマ"
+    },
+    "1566932": {
+        "image": "Grey_Mongoose.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Indian_grey_mongoose",
+        "alt": "Grey Mongoose",
+        "name_en": "Indian Grey Mongoose",
+        "name_jp": "インドオオコメツキ"
+    },
+    "1572084": {
+        "image": "Mink.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Mink",
+        "alt": "Mink",
+        "name_en": "Mink",
+        "name_jp": "ミンク"
+    },
+    "1577634": {
+        "image": "Fossa.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Fossa_(animal)",
+        "alt": "Fossa",
+        "name_en": "Fossa",
+        "name_jp": "フォッサ"
+    },
+    "1566328": {
+        "image": "Walrus.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Walrus",
+        "alt": "Walrus",
+        "name_en": "Walrus",
+        "name_jp": "セイウチ"
+    },
+    "1549753": {
+        "multiple_images": [1549870, 1545838, 1540506, 1553340],
+        "wiki": "https://en.wikipedia.org/wiki/Bird",
+        "grid_columns": 1,
+        "grid_rows": 4,
+        "name_en": "Bird",
+        "name_jp": "鳥類"
+    },
+    "1549870": {
+        "image": "Thalasseus_maximus.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Royal_tern",
+        "alt": "Thalasseus maximus",
+        "name_en": "Royal tern",
+        "name_jp": "オオアジサシ"
+    },
+    "1545838": {
+        "image": "Columba_livia.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Rock_dove",
+        "alt": "Columba livia",
+        "name_en": "Rock dove",
+        "name_jp": "カワラバト"
+    },
+    "1540506": {
+        "image": "Bubo_bubo.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Eurasian_eagle-owl",
+        "alt": "Bubo bubo",
+        "name_en": "Eurasian eagle-owl",
+        "name_jp": "ワシミミズク"
+    },
+    "1553340": {
+        "image": "Forpus_coelestis.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Pacific_parrotlet",
+        "alt": "Forpus coelestis",
+        "name_en": "Pacific parrotlet",
+        "name_jp": "マメルリハインコ"
+    },
+    "2201321": {
+        "image": "Squamata.jpg",
+        "wiki": "https://en.wikipedia.org/wiki/Squamata",
+        "alt": "Squamata",
+        "name_en": "Squamata",
+        "name_jp": "有鱗目 (爬虫類)"
+    }
+}

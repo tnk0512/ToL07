@@ -28,8 +28,8 @@ var svg = d3.select("body").append("svg")
     .attr("width", width)
     .attr("height", height)
     .style("position", "absolute")
-    .style("top", "150px")  // 任意のオフセット
-    .style("left", "150px") // 任意のオフセット
+    .style("top", "20%")  // 任意のオフセット
+    .style("left", "20%") // 任意のオフセット
     .append("g")
     .attr("transform", "translate(" + (width / 2) + "," + (height / 2) + ")");
 
@@ -43,7 +43,10 @@ const config = window.graphConfig || {
     animation: true,
     ease: false,
     timing: null,
-    topNode: null
+    topNode: null,
+    interaction: true,
+    taskMode: false,
+    task: null
 };
 
 // クリッピングパスを追加して、maxradius以上の領域が表示されないようにする
@@ -61,9 +64,10 @@ var barSvg = d3.select("body").append("svg")
     .attr("width", width)
     .attr("height", height + 100)  // 高さを調整
     .style("position", "absolute")
-    .style("top", `${mainSvgRect.top - 50}px`) 
-    //.style("top", `${mainSvgRect.top + 750}px`) 
-    .style("left", `${mainSvgRect.left}px`);
+    //.style("top", `${mainSvgRect.top - 50}px`)
+    .style("top", `calc(20% - 50px)`)
+    //.style("left", `${mainSvgRect.left}px`);
+    .style("left", `20%`);
 
 // 中心点を基準にドラッグできるバー
 var draggableBar = barSvg.append("rect")
@@ -73,7 +77,7 @@ var draggableBar = barSvg.append("rect")
     .attr("x", centerX - 10) // 中央に配置
     .attr("y", centerY - maxradius) // 円周上に配置
     .style("cursor", "grab")
-    .style("fill", "grey")
+    .style("fill", "gray")
     .attr("transform-origin", "10px 25px"); // 長方形の中心を基準に回転
 
 var tooltip = d3.select("body").append("div").attr("class", "tooltip");
@@ -94,6 +98,62 @@ var sizeCriterion = 12; // クリック可能なノード
 var labelCriterion = 30; // ラベルを表示するノード
 let offset = 0; // 共通のオフセット値
 let drag_offset = 0; // ドラッグによるオフセット
+let imageMap = {};
+
+d3.json("/static/data/image_mapping.json", function(error, data) {
+    if (error) {
+        console.error("Error loading JSON:", error);
+        return;
+    }
+    imageMap = data;
+});
+
+
+// 質問リスト
+const questions = [
+    {
+        id : "size1",
+        type: "select",
+        text: "★の扇形の中心角は全体の約何%を占めていると考えますか？",
+        options: ["10%未満", "10%~30%", "30%~50%", "50%以上"],
+        onAnswer: (selected) => {
+            document.getElementById("answerInput").value = selected;
+        }
+    },
+    {
+        id : "size2",
+        type: "click",
+        text: "{depth}層目で最も大きい扇形を持つノードをクリックしてください。",
+        onAnswer: (node) => {
+            document.getElementById("answerInput").value = node.n;
+        }
+    },
+    {
+        id: "size3",
+        type: "select",
+        text: "★は同一層上の扇型の中で、何番目に大きいですか？",
+        options: ["1番目", "それ以外"],
+        onAnswer: (selected) => {
+            document.getElementById("answerInput").value = selected;
+        }
+    },
+    {
+        id: "size4",
+        type: "click",
+        text: "★と⚫︎で、どちらが大きいですか？",
+        onAnswer: (node) => {
+            document.getElementById("answerInput").value = node.n;
+        }
+    },
+    {
+        id : "hierarchical",
+        type: "click",
+        text: "サブツリー内で、★と⚫︎の共通祖先は存在しますか？存在する場合は共通祖先の中で最も2つのノードに近い層のノードを選択してください。",
+        onAnswer: (node) => {
+            document.getElementById("answerInput").value = node.n;
+        }
+    }
+];
 
 // ドラッグイベントの設定
 function initializeDrag(nodes, arc, panrentNode) {
@@ -147,7 +207,9 @@ function initializeDrag(nodes, arc, panrentNode) {
             }
         
             // ラベルを再描画
-            updateLabels(nodes, arc);
+            if (!config.taskMode) {
+                updateLabels(nodes, arc);
+            }
         });
     }
 
@@ -196,7 +258,589 @@ function updateLabels(nodes, arc) {
             return d.is_merged ? d.merge_count : d.name;
         });
     }
+
+function updateLabelsForTask(nodes, nodeNames) {
+    svg.selectAll("text").remove(); // 全てのラベルを削除
+
+    // 対象ノードに対するラベルを追加
+    svg.selectAll("text")
+        .data(nodes.filter(function(d) {
+            return nodeNames.includes(d.n);
+        }))
+        .enter().append("text")
+        .attr("transform", function(d) {
+            if (config.task === "hierarchical") {
+                // ラベルを中央に配置
+                console.log("hierarchicalタスク");
+                const [centerX, centerY] = arc.centroid(d);
+                return "translate(" + arc.centroid(d) + ")";
+                //return `translate(${centerX}, ${centerY})`;
+            } else {
+                // 通常のランダムな配置
+                const [centerX, centerY] = arc.centroid(d);
+
+                // 中心角度を計算 (atan2で角度取得)
+                const centerAngle = Math.atan2(centerY, centerX);
+
+                // ランダムな角度のずれを追加
+                const angleOffset = (Math.random() - 0.5) * 0.6; // ±0.1ラジアンの範囲でずらす
+                const randomAngle = centerAngle + angleOffset;
+
+                // 半径はそのまま、角度方向のみ変更して新しい位置を計算
+                const radius = Math.sqrt(centerX ** 2 + centerY ** 2);
+                const x = Math.cos(randomAngle) * radius;
+                const y = Math.sin(randomAngle) * radius;
+
+                return `translate(${x}, ${y})`;
+            }
+        })        
+        .attr("text-anchor", "middle")
+        .each(function(d, i) {
+            const textElement = d3.select(this);
+            // ラベルの種類をインデックスに応じて切り替える
+            const labelSymbol = i === 0 ? "★" : "●";
+            textElement.attr("font-size", "25px").text(labelSymbol);
+        });
+}
+    
+    
+    
 // 初期化関数
+function getRandomNodeName(nodes) {
+    // 条件を満たすノードをフィルタ
+    const validNodes = nodes.filter(d => {
+        return d.dx > 0.07 && d.dx < 1;
+    });
+
+    if (validNodes.length === 0) {
+        console.warn("No valid nodes found for label criterion.");
+        return null; // 条件を満たすノードがなければ null を返す
+    }
+
+    // フィルタされたノードからランダムに選択
+    const randomIndex = Math.floor(Math.random() * validNodes.length);
+    return validNodes[randomIndex].name;
+}
+
+function getTwoRandomNodesAtSameDepth(nodes) {
+    // 深さごとにノードを手動でグループ化
+    const depthGroups = {};
+    nodes.forEach(d => {
+        if (!depthGroups[d.depth]) {
+            depthGroups[d.depth] = [];
+        }
+        depthGroups[d.depth].push(d);
+    });
+
+    // グループ化された深さを取得し、ランダムに選ぶ（深い層ほど高確率）
+    const depths = Object.keys(depthGroups).map(Number).filter(depth => depth > 1); // 深さのリストを取得
+    let validNodes = [];
+    let selectedDepth = null;
+
+    // 条件を満たす validNodes が見つかるまで繰り返し
+    while (depths.length > 0) {
+        const weightedDepthIndex = Math.floor(Math.random() ** 2 * depths.length);
+        selectedDepth = depths.splice(weightedDepthIndex, 1)[0]; // 選択した深さを depths から除外
+
+        // 選ばれた深さのノードをフィルタ
+        validNodes = (depthGroups[selectedDepth] || []).filter(d => {
+            const r = y(d.y + d.dy / 2); // 半径を計算
+            const theta = x(d.x + d.dx) - x(d.x); // 角度を計算
+            return r * theta >= labelCriterion && theta < 2 * Math.PI;
+        });
+
+        if (validNodes.length >= 2) {
+            break; // 十分なノードが見つかった場合にループを終了
+        }
+    }
+
+    if (validNodes.length < 2) {
+        console.warn(`Not enough valid nodes at depth ${selectedDepth} to select two.`);
+        return [null, null];
+    }
+
+    // 最初のノードをランダムに選択
+    const firstIndex = Math.floor(Math.random() * validNodes.length);
+
+    // 範囲を設定（インデックスが遠すぎないよう制限）
+    const range = Math.max(1, Math.floor(validNodes.length / 4)); // 全体の1/4を範囲に設定
+    const minIndex = Math.max(0, firstIndex - range);
+    const maxIndex = Math.min(validNodes.length - 1, firstIndex + range);
+
+    // 範囲内で2つ目のノードをランダムに選択
+    let secondIndex;
+    do {
+        secondIndex = Math.floor(Math.random() * (maxIndex - minIndex + 1)) + minIndex;
+    } while (secondIndex === firstIndex); // インデックスが同じ場合は再選択
+
+    // 選んだ2つのノードの名前を返す
+    return [validNodes[firstIndex].name, validNodes[secondIndex].name];
+}
+
+function fortask_size3(nodes, depth, rank) {
+    // 指定された深さのノードを取得
+    const depthNodes = nodes.filter(d => d.depth === depth);
+
+    if (depthNodes.length === 0) {
+        console.warn(`No nodes found at depth ${depth}.`);
+        return null;
+    }
+
+    // d.dx の降順でソート
+    depthNodes.sort((a, b) => b.dx - a.dx);
+
+    // ランクに応じたノードを返す
+    return depthNodes[rank - 1]; // ランクは1始まりなので -1
+}
+
+function fortask_size4(nodes, initialDepth, maxDifference) {
+    // 深さごとにノードをグループ化
+    const depthGroups = {};
+    nodes.forEach(d => {
+        if (!depthGroups[d.depth]) {
+            depthGroups[d.depth] = [];
+        }
+        depthGroups[d.depth].push(d);
+    });
+
+    // 全ての深さをリスト化し、ランダムな順序で探索
+    const depths = Object.keys(depthGroups).map(Number).sort(() => Math.random() - 0.5);
+
+    let validNodes = [];
+    let selectedDepth = initialDepth;
+
+    // 条件を満たすノードが見つかるまで探索
+    for (const depth of depths) {
+        validNodes = (depthGroups[depth] || []).filter(d => d.dx > 0.1);
+        if (validNodes.length >= 2) {
+            selectedDepth = depth; // 条件を満たす深さを更新
+            break;
+        }
+    }
+
+    if (validNodes.length < 2) {
+        console.warn(`Not enough valid nodes across all depths with d.dx > 0.2 to compare.`);
+        triggerNextTask();
+        return [null, null];
+    }
+
+    // d.dx の昇順でソート
+    validNodes.sort((a, b) => a.dx - b.dx);
+
+    // 差が maxDifference 以下のペアを探す
+    for (let i = 0; i < validNodes.length - 1; i++) {
+        if (Math.abs(validNodes[i].dx - validNodes[i + 1].dx) <= maxDifference) {
+            return [validNodes[i], validNodes[i + 1]];
+        }
+    }
+
+    console.warn(`No nodes with size difference <= ${maxDifference} and d.dx > 0.3 at any depth.`);
+    triggerNextTask();
+    return [null, null];
+}
+function triggerNextTask() {
+    console.log("Triggering next task...");
+    const nextButton = document.getElementById("nextButton");
+    if (nextButton) {
+        nextButton.click(); // 「次へ」ボタンを自動的にクリック
+    } else {
+        console.warn("Next button not found.");
+    }
+}
+
+function generateQuestion(nodes, task, node1, node2, depth, ans_num) {
+    const questionArea = document.getElementById("questionArea");
+    const questionText = document.getElementById("questionText");
+    const answerArea = document.getElementById("answerArea");
+    console.log(`現在の問題：${task}`);
+
+    // ランダムな質問を選択
+    const Question = questions.find(question => question.id === task);
+    let answer;
+    let isAnswered = false; // 回答済みフラグ
+
+    if (task === "size1") {
+        answer = AnswerSize1(ans_num); // 正解
+        // 質問文を設定
+        questionText.textContent = `${Question.text}`;
+        // ラベルを更新
+        updateLabelsForTask(nodes, [node1]);
+    }
+    if (task === "size2") {
+        answer = String(ans_num);
+        questionText.textContent = Question.text.replace("{depth}", depth);
+        drawLayerCircles(depth);
+    } 
+    if (task === "size3") {
+        answer = ans_num === 1 ? "1番目" : "それ以外";
+        questionText.textContent = `${Question.text}`;
+        updateLabelsForTask(nodes, [node1]);
+    }
+    if (task === "size4") {
+        answer = String(ans_num);
+        questionText.textContent = `${Question.text}`;
+        updateLabelsForTask(nodes, [node1, node2]);
+    }
+    if (task === "hierarchical") {
+        answer = String(ans_num);
+        questionText.textContent = `${Question.text}`;
+        updateLabelsForTask(nodes, [node1, node2]);
+    }
+    console.log(`正解 (${task}):`, answer);
+
+    // 解答エリアをクリア
+    answerArea.innerHTML = "";
+
+    // 解答欄を生成
+    const answerInput = document.createElement("input");
+    answerInput.id = "answerInput";
+    answerInput.type = "text";
+    answerInput.style.width = "100%";
+    answerInput.readOnly = true;
+
+    if (Question.type === "click" || Question.type === "zoom") {
+        config.interaction = false; // タスク用のインタラクションを無効化
+    } else if (Question.type === "select") {
+        Question.options.forEach(option => {
+            const radioLabel = document.createElement("label");
+            radioLabel.style.display = "block";
+            radioLabel.style.fontSize = "18px"; // 選択肢の文字サイズを大きく
+            radioLabel.style.margin = "10px 0";
+            
+            const radioInput = document.createElement("input");
+            radioInput.type = "radio";
+            radioInput.name = "questionOption";
+            radioInput.value = option;
+            radioInput.style.transform = "scale(1.5)"; // ボタンを大きく
+            radioInput.style.marginRight = "10px";
+            
+            radioInput.addEventListener("click", () => Question.onAnswer(option));
+            radioLabel.appendChild(radioInput);
+            radioLabel.appendChild(document.createTextNode(option));
+            answerArea.appendChild(radioLabel);
+        });
+    }
+    answerArea.appendChild(answerInput);
+    // タイマーで3秒後に次へ進む処理
+    const timer = setTimeout(() => {
+        if (!isAnswered) { // 未回答の場合のみ処理
+            console.log("Time's up! Automatically moving to next task.");
+            handleAnswerSubmission(answer, answerInput.value.trim());
+            isAnswered = true; // 回答済みに設定
+            triggerNextTask();
+        }
+    }, 3000);
+
+    // 「次へ」ボタンのクリック処理
+    nextButton.onclick = () => {
+        if (!isAnswered) { // 未回答の場合のみ処理
+            clearTimeout(timer); // タイマーを停止
+            handleAnswerSubmission(answer, answerInput.value.trim());
+            isAnswered = true; // 回答済みに設定
+            triggerNextTask();
+        }
+    };
+}
+
+// タスクの正解
+function AnswerSize1(num) {
+    if (num === 1) {
+        return "10%未満";
+    } else if (num === 2) {
+        return "10%~30%";
+    } else if (num === 3) {
+        return "30%~50%";
+    } else {
+        return "50%以上";
+    }
+}
+
+function AnswerSize2(nodes, depth) {
+    // 指定の深さのノードをフィルタ
+    const depthNodes = nodes.filter(d => d.depth === depth);
+    if (depthNodes.length === 0) {
+        console.warn(`No nodes found at depth ${depth}.`);
+        return null;
+    }
+
+    // 最大の d.dx を持つノードを選ぶ
+    const largestNode = depthNodes.reduce((max, node) => (node.dx > max.dx ? node : max), depthNodes[0]);
+    return largestNode.name;
+}
+
+function drawLayerCircles(depth) {
+    // 現在のグラフからすべての円を削除
+    svg.selectAll(".layer-circle").remove();
+
+    // 内径と外径を取得
+    const innerRadius = y(depth / 5);
+    let outerRadius = y((depth + 1) / 5);
+
+    // depth === 4 のとき外径を少し内側にする
+    if (depth === 4) {
+        outerRadius *= 0.99;
+    }
+
+    // 内径の円を描画
+    svg.append("circle")
+        .attr("class", "layer-circle")
+        .attr("cx", 0)
+        .attr("cy", 0)
+        .attr("r", innerRadius)
+        .style("fill", "none")
+        .style("stroke", "#4d4d4d")
+        .style("stroke-width", "1.8px")
+        .style("stroke-dasharray", "4,4");
+
+    // 外径の円を描画
+    svg.append("circle")
+        .attr("class", "layer-circle")
+        .attr("cx", 0)
+        .attr("cy", 0)
+        .attr("r", outerRadius)
+        .style("fill", "none")
+        .style("stroke", "#4d4d4d")
+        .style("stroke-width", "1.8px")
+        .style("stroke-dasharray", "4,4");
+}
+
+function calculateAnswerHierarchical(node1, node2, nodes) {
+    // ノードをたどり、親のリストを作成
+    function getParentList(node) {
+        const parentList = [];
+        let current = node; // ノードを直接更新しないための変数
+
+        while (current && current.parent) {
+            parentList.push(current); // 現在のノードをリストの先頭に追加
+            current = current.parent; // 親ノードを検索
+        }
+        return parentList;
+    }
+
+    const node1Obj = nodes.find(n => n.name === node1);
+    const node2Obj = nodes.find(n => n.name === node2);
+
+    if (!node1Obj || !node2Obj) {
+        console.warn("One or both nodes not found.");
+        return null;
+    }
+
+    const node1Parents = getParentList(node1Obj);
+    const node2Parents = getParentList(node2Obj);
+
+    // 最初に一致する親ノードを探す
+    const commonAncestor = node1Parents.find(parent => node2Parents.includes(parent));
+    return commonAncestor ? commonAncestor.name : null;
+}
+
+// 回答の正誤判定とスコア計算を行う関数
+function handleAnswerSubmission(correctAnswer, userAnswer) {
+    let score = parseInt(localStorage.getItem("score"), 10) || 0;
+    let taskResults = JSON.parse(localStorage.getItem("taskResults")) || [];
+    let questionIndex = parseInt(localStorage.getItem("currentQuestionIndex"), 10) || 0;
+    const currentURL = new URL(window.location.href);
+    const currentTaskNum = parseInt(currentURL.searchParams.get("tasknum"), 10) || config.tasknum;
+    let isCorrect = (userAnswer === correctAnswer);
+
+    // スコアの更新
+    if (isCorrect) {
+        score += 1;
+    }
+    localStorage.setItem("score", score);
+    
+    // 結果を記録
+    taskResults.push({
+        question: currentTaskNum,
+        userAnswer: userAnswer,
+        correctAnswer: correctAnswer,
+        result: isCorrect ? "○" : "×"
+    });
+    localStorage.setItem("taskResults", JSON.stringify(taskResults));
+    
+    console.log(`現在の点数: ${score}`);
+
+    // 40問終了時に結果を表示
+    if (questionIndex + 1 === 40) {
+        //displayResults(score, taskResults);
+    }
+}
+
+function displayResults(score, taskResults) {
+    /*
+    const resultContainer = document.getElementById("resultContainer");
+    resultContainer.innerHTML = "タスク結果";
+
+    taskResults.forEach(result => {
+        let resultText = document.createElement("p");
+        resultText.textContent = `問 ${result.question}: ${result.result} YOU → ${result.userAnswer}, 正解 → ${result.correctAnswer}`;
+        resultText.style.fontSize = "6px";
+        resultContainer.appendChild(resultText);
+    });
+
+    let finalScore = document.createElement("h3");
+    finalScore.textContent = `最終スコア: ${localStorage.getItem("score")}/40`;
+    resultContainer.appendChild(finalScore);*/
+
+    // CSV ダウンロードボタンを追加
+    let downloadButton = document.createElement("button");
+    downloadButton.textContent = "CSVをダウンロード";
+    downloadButton.onclick = downloadCSV(taskResults);
+}
+
+function downloadCSV(taskResults) {
+    let sortedResults = taskResults.sort((a, b) => a.question - b.question);
+    let csvContent = "\ufeff" + "問題番号,あなたの回答,正解,結果,colorChange\n"; // UTF-8 BOMを追加
+    
+    sortedResults.forEach((result, index) => {
+        let colorChange = (index < 20) ? 0 : 1; // 1~20個目は0、21~40個目は1
+        csvContent += `${result.question},${result.userAnswer},${result.correctAnswer},${result.result},${colorChange}\n`;
+    });
+    /*
+    let sortedResults = taskResults.sort((a, b) => a.question - b.question);
+    let csvContent = "\ufeff" + "問題番号,あなたの回答,正解,結果\n"; // UTF-8 BOMを追加
+    taskResults.forEach(result => {
+        csvContent += `${result.question},${result.userAnswer},${result.correctAnswer},${result.result}\n`;
+    });*/
+    let blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    let link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `test_${config.task}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function initializeforTask(task) {
+    // タスクデータを取得
+    fetch(`/load_task_data?task=${task}`)
+        .then(response => response.json())
+        .then(taskData => {
+            if (taskData.length === 0) {
+                console.error("No task data available for this task type.");
+                return;
+            }
+
+            // タスクデータからランダムに1つ選択
+            const taskNum = config.tasknum;
+            const randomTask = taskData[taskNum];
+            const { Top, node1, node2, depth, Answer, colorChange } = randomTask;
+
+            // 初期設定
+            config.topNode = Top;
+            config.colorChange = colorChange > 0;
+            //console.log(`Task: Top=${Top}, node1=${node1}, node2=${node2}, depth=${depth}, Answer=${Answer}, color=${colorChange}`);
+            // 現在のグラフ情報から該当ノードを探索
+            let currentNode = null;
+        
+            svg.selectAll("path").each(function(d) {
+                if (d.n === config.topNode) {
+                    currentNode = d; // 該当ノードを取得
+                }
+            });
+        
+            if (!currentNode) {
+                console.error(`Node with n=${config.topNode} not found in the current tree.`);
+                return;
+            }
+        
+            // `startAngle` と `endAngle` を元の木構造で計算
+            const startAngle = x(currentNode.x);
+            const endAngle = x(currentNode.x + currentNode.dx);
+            clicknodeDepth = currentNode.depth;
+        
+            // 中心角度の計算
+            const opposingAngle = (startAngle + endAngle) / 2 - Math.PI;
+            offset -= opposingAngle; // クリックによるオフセットを調整
+        
+            // ノード色のマップを作成
+            const colorMap = {};
+            svg.selectAll("path").each(function(d) {
+                colorMap[d.name] = d3.select(this).style("fill");
+            });
+        
+            fetch('/subtree', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ n: config.topNode })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const subtree = data.newtree;
+                const parentNode = data.parent;
+        
+                // グラフを即座に更新
+                svg.selectAll("path").remove();
+                svg.selectAll("text").remove();
+        
+                // 座標範囲をリセット
+                x.range([0, 2 * Math.PI]);
+                y.range([0, maxradius]);
+        
+                const nodes = partition.nodes(subtree);
+        
+                var overstartAngle = previousStartAngle + (previousEndAngle - previousStartAngle) * startAngle/(2*Math.PI);
+                var overendAngle = previousStartAngle + (previousEndAngle - previousStartAngle) * endAngle/(2*Math.PI);
+        
+                // ノードの描画
+                const path = svg.selectAll("path").data(nodes).enter().append("path")
+                    .attr("d", arc)
+                    .attr("data-id", d => d.n)
+                    .style("fill", function(d) {
+                        if (config.colorChange) {
+                            return fillColor(d);
+                        }
+                        //return colorMap[d.name] || computeNodeColor(d, d.depth+clicknodeDepth, overstartAngle, overendAngle);
+                        return computeNodeColor(d, d.depth+clicknodeDepth, overstartAngle, overendAngle);
+                    })
+                    .style("opacity", d => (d.is_merged ? 0.3 : 1));
+        
+                // クリック可能なパスを設定
+                const clickablePaths = path.filter(d => {
+                    const r = y(d.y + d.dy / 2);
+                    const theta = x(d.x + d.dx) - x(d.x);
+                    return r * theta >= sizeCriterion || d === d.parent;
+                });
+        
+                clickablePaths.on("click", handleNodeClick);
+                    //.on("mouseover", mouseover)
+                    //.on("mouseout", mouseout);
+        
+                previousStartAngle = overstartAngle; // 追加：前回の開始角度を保存
+                previousEndAngle = overendAngle; // 追加：前回の終了角度を保存
+                overviewX = d3.scale.linear().range([overstartAngle, overendAngle]);
+                overviewY = d3.scale.linear().range([
+                    overmaxradius * clicknodeDepth / maxdepth,
+                    overmaxradius * (clicknodeDepth + 4 < maxdepth ? clicknodeDepth + 4 : maxdepth) / maxdepth
+                ]);
+            
+                var overviewArc = d3.svg.arc()
+                    .startAngle(function(d) { return Math.PI/2 - Math.max(0, Math.min(2 * Math.PI, overviewX(d.x))); })
+                    .endAngle(function(d) { return Math.PI/2 - Math.max(0, Math.min(2 * Math.PI, overviewX(d.x + d.dx))); })
+                    .innerRadius(function(d) { return Math.max(0, overviewY(d.y)); })
+                    .outerRadius(function(d) { return Math.max(0, overviewY(d.y + d.dy)); });
+            
+                var overviewSvg = d3.select("#overview").select("svg").select("g");
+            
+                overviewSvg.selectAll("path").remove();
+            
+                overviewSvg.selectAll("path")
+                    .data(nodes)
+                    .enter().append("path")
+                    .attr("d", overviewArc)
+                    .style("fill", function(d) {
+                        const mainPath = svg.select(`path[data-id="${d.n}"]`);
+                        if (!mainPath.empty()) {
+                            d.overviewColor = mainPath.style("fill");
+                            return d.overviewColor;
+                        }
+                    });
+                updateNodeCount(nodes);
+                generateQuestion(nodes, config.task, node1, node2, depth, Answer);
+            })
+            .catch(error => console.error("Error fetching subtree:", error));
+        });
+}
+
 function initializeGraphWithTopNode(topNode) {
     // 現在のグラフ情報から該当ノードを探索
     let currentNode = null;
@@ -269,7 +913,7 @@ function initializeGraphWithTopNode(topNode) {
             return r * theta >= sizeCriterion || d === d.parent;
         });
 
-        clickablePaths.on("click", click)
+        clickablePaths.on("click", handleNodeClick)
             .on("mouseover", mouseover)
             .on("mouseout", mouseout);
 
@@ -303,28 +947,16 @@ function initializeGraphWithTopNode(topNode) {
                 }
             });
     
-        //previousTopNode = d;
-
-        // ラベルを再描画
-        svg.selectAll("text")
-            .data(nodes.filter(d => {
-                const r = y(d.y + d.dy / 2);
-                const theta = x(d.x + d.dx) - x(d.x);
-                return r * theta >= labelCriterion; // ラベル表示基準を満たすノードのみ
-            }))
-            .enter().append("text")
-            .attr("transform", d => "translate(" + arc.centroid(d) + ")")
-            .attr("text-anchor", "middle")
-            .attr("font-size", "10px")
-            .text(d => d.name);
-
-        //previousClickDepth = clicknodeDepth;
         // ドラッグバーを追加
         var drag = initializeDrag(nodes, arc, parentNode); // ドラッグ設定を適用
         draggableBar.call(drag); // ドラッグバーに適用
     
-        // ラベル再描画
-        updateLabels(nodes, arc);
+        if(config.taskMode) {
+            //generateQuestion(nodes);
+            // 初期化処理
+        } else {
+            updateLabels(nodes, arc);
+        }
         updateNodeCount(nodes);
     })
     .catch(error => console.error("Error fetching subtree:", error));
@@ -347,11 +979,89 @@ fetch('/data', {
 
         // `topNode` が指定されている場合に特定のサブツリーを取得して描画
         if (config.topNode) {
-            initializeGraphWithTopNode(config.topNode);
+            //initializeGraphWithTopNode(config.topNode);
+        }
+        if (config.task) {
+            initializeforTask(config.task);
         }
     })
     .catch(error => console.error("Error fetching initial data:", error));
+
+// 問題カウント
+// 現在の問題番号をローカルストレージから取得（初期値は0）
+let currentQuestionIndex = parseInt(localStorage.getItem("currentQuestionIndex"), 10) || 0;
+
+// 現在の問題番号を更新する関数
+function updateQuestionCounter(currentIndex, totalQuestions = 40) {
+    const questionCounter = document.getElementById("questionCounter");
+    if (questionCounter) {
+        questionCounter.textContent = `${currentIndex + 1} / ${totalQuestions} 問目`;
+    }
+}
+
+document.getElementById("nextButton").addEventListener("click", function () {
+    // 現在のURLを取得
+    const currentURL = new URL(window.location.href);
+
+    // `task` と `tasknum` を取得
+    const task = config.task;
+    let taskOrder;
+    if (currentURL.searchParams.get("tasknum") !== null) {
+        taskOrder = JSON.parse(localStorage.getItem(`taskOrder_${task}`))
+    } else {
+        taskOrder = [];
+    }
+    const currentTaskNum = parseInt(currentURL.searchParams.get("tasknum"), 10) || config.tasknum;
+    //console.log(`現在のtasknum : ${currentTaskNum}`);
+    let score = parseInt(localStorage.getItem("score"), 10) || 0;
+    let taskResults = JSON.parse(localStorage.getItem("taskResults")) || [];
+
+    // ランダムな順序が未生成の場合、初期化
+    if (taskOrder.length === 0) {
+        taskOrder = Array.from({ length: 40 }, (_, i) => i).sort(() => Math.random() - 0.5); // 0~39 をランダム順序で生成
+        const index = taskOrder.indexOf(currentTaskNum);
+        // 要素がリストに存在する場合
+        if (index !== -1) {
+            // 対象要素をリストから削除
+            const [item] = taskOrder.splice(index, 1);
+            // 対象要素をリストの先頭に追加
+            taskOrder.unshift(item);
+        }
+        //console.log(`初期タスク順 : ${taskOrder}, ${taskOrder.length}`);
+        localStorage.setItem(`taskOrder_${task}`, JSON.stringify(taskOrder)); // ローカルストレージに保存
+        localStorage.setItem("score", "0");
+        localStorage.setItem("taskResults", JSON.stringify([]));
+    }
+
+    //console.log(`タスク順 : ${taskOrder}, ${taskOrder.length}`);
+
+    const currentIndex = taskOrder.indexOf(Number(currentTaskNum));
+    const nextIndex = currentIndex + 1;
+    localStorage.setItem("currentQuestionIndex", nextIndex); // 新しい値を保存
+
+    // 現在の回答の正誤判定
+    const answerInput = document.getElementById("answerInput");
+    const userAnswer = answerInput ? answerInput.value.trim() : null;
+    updateQuestionCounter(currentIndex, 40);
+
+    // すべてのタスクが完了した場合、終了メッセージを表示
+    if (nextIndex > 39) {
+        displayResults(score, taskResults);
+        alert(`終了です。\n合計得点: ${parseInt(localStorage.getItem("score"), 10) || 0} / 40`);
+        return;
+    }
+
+    const nextTaskNum = taskOrder[nextIndex];
+    currentURL.searchParams.set("tasknum", nextTaskNum); // 次のタスク番号
     
+    window.location.href = currentURL.toString();
+});
+
+// 初期ロード時に問題番号を設定
+document.addEventListener("DOMContentLoaded", function () {
+    updateQuestionCounter(currentQuestionIndex, 40); // 初期表示
+});
+
 function drawChart(root) {
     var nodes = partition.nodes(root);
     subtreeNodeNames = nodes.map(d => d.name);  // 表示されるサブツリー内のノード名を保存
@@ -366,8 +1076,8 @@ function drawChart(root) {
         .attr("width", mainSvg.attr("width"))
         .attr("height", mainSvg.attr("height"))
         .style("position", "absolute")
-        .style("top", mainSvg.style("top"))
-        .style("left", mainSvg.style("left"))
+        .style("top", "20%")  // 任意のオフセット
+        .style("left", "20%")
         .style("opacity", 0);
     
     // 初回コピー
@@ -430,7 +1140,7 @@ function drawChart(root) {
         return !nonClickablePaths.data().includes(d);
     });
     
-    clickablePaths.on("click", click)
+    clickablePaths.on("click", handleNodeClick)
                 .on("mouseover", mouseover)
                 .on("mouseout", mouseout);
 
@@ -457,7 +1167,6 @@ function drawChart(root) {
     
     var drag = initializeDrag(nodes, arc, parentNode=NaN); // ドラッグ設定を適用
     draggableBar.call(drag); // ドラッグ可能なバーに適用
-    
     updateLabels(nodes, arc); // ラベルを初期描画
     
     updateNodeCount(nodes);
@@ -485,15 +1194,92 @@ function computeNodeColor(d, depth, startAngle, endAngle) {
     return LabToHex(L, a, b);
 }
 
-
 function click(d) {
     var startTime = performance.now();
-    //var startAngle = x(d.x);
-    //var endAngle = x(d.x + d.dx);
-    //let initialColor = d3.select(this).style("fill");
     var clickedNodeParent = d.parent;
     //console.log("Clicked Node", d.name);
-    
+    // クリックされたノードが辞書に存在するか確認
+    let infoPanel = d3.select("#info-panel");
+    let nodeName = d3.select("#node-name");
+    let nodeImage = d3.select("#node-image");
+    let nodeWiki = d3.select("#node-wiki");
+    let gridContainer = d3.select("#grid-container");
+
+    // 既存の情報をクリア
+    nodeName.text("");
+    nodeImage.style("display", "none").attr("src", "");
+    nodeWiki.style("display", "none").attr("href", "");
+    gridContainer.html("").style("display", "none"); // グリッドの初期化
+
+    if (imageMap[d.n]) {
+        let imgData = imageMap[d.n];
+        let nameContent = `<strong>${d.name}</strong><br>`;
+        if (imgData.name_en) nameContent += `<span style="font-size: 14px;">English: ${imgData.name_en}</span><br>`;
+        if (imgData.name_jp) nameContent += `<span style="font-size: 14px;">日本語: ${imgData.name_jp}</span><br>`;
+        nodeName.html(nameContent);
+
+        if (imgData.multiple_images) {
+            // **複数画像のグリッド表示**
+            //nodeName.text(d.name);
+
+            let gridColumns = imgData.grid_columns || 3;
+            let gridRows = imgData.grid_rows || 6;
+            let panelWidth = 300;
+            let panelHeight = 500; // info-panel の高さ
+            let imgWidth = panelWidth / gridColumns - 5;
+            let imgHeight = panelHeight / gridRows - 10; // 余白を考慮
+
+            gridContainer.style("display", "grid")
+                .style("grid-template-columns", `repeat(${gridColumns}, 1fr)`)
+                .style("grid-template-rows", `repeat(${gridRows}, 1fr)`)
+                .style("gap", "5px");
+
+            imgData.multiple_images.forEach(img => {
+                let imgSrc;
+                let imgNodeId = img; // 初期値として `n` を使用
+
+                if (typeof img === "number" && imageMap[img] && imageMap[img].image) {
+                    imgSrc = `/static/images/${imageMap[img].image}`;
+                } else {
+                    imgSrc = `/static/images/${img}`;
+                }
+
+                let imgElement = gridContainer.append("img")
+                    .attr("src", imgSrc)
+                    .style("width", `${imgWidth}px`)
+                    .style("height", `${imgHeight}px`)
+                    .style("object-fit", "cover")
+                    .style("display", "block")
+                    .style("margin", "auto")
+                    .style("cursor", "pointer") // クリック可能にする
+                    .attr("data-id", imgNodeId); // ノードIDをセット
+
+                // **画像クリック時に `fetchAncestors()` を実行**
+                imgElement.on("click", function () {
+                    let selectedId = d3.select(this).attr("data-id");
+                    console.log(`id : ${selectedId}, type : ${typeof selectedId}`);
+
+                    if (typeof selectedId === "number") {
+                        fetchAncestors(selectedId); // `n` をそのまま渡す
+                    } else {
+                        fetchAncestors(selectedId); // `name` をそのまま渡す
+                    }
+                });
+            });
+
+            // Wikipedia のリンクを設定
+            nodeWiki.attr("href", imgData.wiki)
+                .style("display", "inline-block");
+        } else {
+            // **単一画像の通常表示**
+            //nodeName.text(d.name);
+            nodeImage.attr("src", `/static/images/${imgData.image}`)
+                .attr("alt", imgData.alt)
+                .style("display", "block");
+            nodeWiki.attr("href", imgData.wiki)
+                .style("display", "inline-block");
+        }
+    }
     // クリックノードの真のルートノードからの深さを再帰的に求める
     function getNodeDepth(node, previousDepth) {
         //console.log(`${node.name}の前のクリック深さ：${previousDepth}`);
@@ -505,7 +1291,6 @@ function click(d) {
             //console.log(`${node.name}はルート`);
             return previousDepth - 1;
         }
-        console.log(`${node.parent.name}:${previousDepth}`);
         return getNodeDepth(node.parent, previousDepth + 1);
         }
     var clicknodeDepth = getNodeDepth(d, previousClickDepth);
@@ -659,7 +1444,7 @@ function click(d) {
                     return r * theta >= sizeCriterion || d === clickedNode.parent; // クリック可能ノードをフィルタリング
                 });
             
-                clickablePaths.on("click", click)
+                clickablePaths.on("click", handleNodeClick)
                     .on("mouseover", mouseover)
                     .on("mouseout", mouseout);
             }
@@ -787,7 +1572,7 @@ function click(d) {
                 return r * theta >= sizeCriterion || d === d.parent;
             });
     
-            clickablePaths.on("click", click)
+            clickablePaths.on("click", handleNodeClick)
                 .on("mouseover", mouseover)
                 .on("mouseout", mouseout);
 
@@ -822,20 +1607,7 @@ function click(d) {
                 });
         
             previousTopNode = d;
-    
-            // ラベルを再描画
-            svg.selectAll("text")
-                .data(nodes.filter(d => {
-                    const r = y(d.y + d.dy / 2);
-                    const theta = x(d.x + d.dx) - x(d.x);
-                    return r * theta >= labelCriterion; // ラベル表示基準を満たすノードのみ
-                }))
-                .enter().append("text")
-                .attr("transform", d => "translate(" + arc.centroid(d) + ")")
-                .attr("text-anchor", "middle")
-                .attr("font-size", "10px")
-                .text(d => d.name);
-    
+            updateLabels(nodes, arc);
             previousClickDepth = clicknodeDepth;
             finalizeUpdate(nodes, parentNode)
         })}
@@ -852,11 +1624,6 @@ function click(d) {
         offset -= opposingAngle; // クリックによるオフセットを調整
         var clickedNodeParent = d.parent;
         var stepdepth = predepth + d.depth;
-        console.log(`${d.name}の真の深さ：${stepdepth}`);
-        // 現在の深さを保存して次回のクリック時に使用
-        //previousDepth = nodeDepth;
-        console.log("Clicked Node", d.name);
-        // 既存の path の色を保存
         const colorMap = {};
         svg.selectAll("path").each(function(d) {
             // 各ノードの名前をキーに現在の色を保存
@@ -939,7 +1706,7 @@ function click(d) {
                 return r * theta >= sizeCriterion || d === clickedNodeParent; // クリックノードの親ノードはrが負の値のため
             });
         
-            clickablePaths.on("click", click)
+            clickablePaths.on("click", handleNodeClick)
                 .on("mouseover", mouseover)
                 .on("mouseout", mouseout);
         
@@ -993,18 +1760,23 @@ function click(d) {
             d3.select("#copySvg")
                 .style("opacity", 0.3)
                 .transition()
-                .duration(5000)
+                .duration(4000)
                 .style("opacity", 0);
 
                 // トランジション中はクリックとホバーを無効化
-                svg.selectAll("path")
+
+                // クリック時に `mouseout` を強制発火させる
+                // クリック時にツールチップを非表示にする
+                // クリック時にツールチップを非表示にする
+                tooltip.style("visibility", "hidden");
+                /*svg.selectAll("path")
                     .on("click", null)
                     .on("mouseover", null)
-                    .on("mouseout", null);
+                    .on("mouseout", null);*/
             
                 svg.transition()
-                    //.delay(4000)
-                    .duration(5000)
+                    //.delay(6000)
+                    .duration(4000)
                     .tween("scale", function() {
                         let xr = d3.interpolate(x.range(), [0, 2 * Math.PI]),
                             yr = d3.interpolate(y.range(), [0, maxradius]);
@@ -1052,7 +1824,8 @@ function click(d) {
                             dispatch.step(nextStartAngle, nextEndAngle);
                             // トランジション終了後にクリックとホバーを再有効化
                             svg.selectAll("path")
-                                .on("click", click)
+                                .style("pointer-events", "auto")
+                                .on("click", handleNodeClick)
                                 .on("mouseover", mouseover)
                                 .on("mouseout", mouseout);
                         }
@@ -1087,7 +1860,7 @@ function click(d) {
                     })
                     .style("fill", "gray")
                     .style("opacity", 0.5)
-                    .on("click", click)
+                    .on("click", handleNodeClick)
                     .on("mouseover", mouseover)
                     .on("mouseout", mouseout);
             }
@@ -1100,6 +1873,21 @@ function click(d) {
             updateNodeCount(nodes);
         }
     }
+
+// ノードのクリック処理
+function handleNodeClick(d) {
+    if (config.interaction) {
+        // 通常のクリック処理（ズームインなど）
+        return click(d);
+    } else {
+        // 解答としてクリックされたノードを反映
+        const answerInput = document.getElementById("answerInput");
+        if (answerInput) {
+            answerInput.value = d.n;
+        }
+    }
+}
+
 // mainSvg の内容を copySvg にコピーする関数
 function copyMainSvgToCopySvg() {
     const mainSvg = d3.select("#mainSvg");
@@ -1143,6 +1931,67 @@ function highlightAncestors(ancestors) {
     }
 
 // ノードの祖先を取得
+function fetchAncestors(identifier) {
+    let searchKey, searchValue;
+
+    if (/^\d+$/.test(identifier)) { 
+        // すべて数字なら `n` で検索
+        searchKey = "n";
+        searchValue = identifier;
+    } else {
+        // 数字以外が含まれるなら `name` で検索
+        searchKey = "name";
+        searchValue = identifier;
+    }
+
+    // 祖先情報を取得
+    fetch('/ancestor', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ [searchKey]: searchValue }) // `name` または `n` を送信
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.ancestors || data.ancestors.length === 0) {
+            alert("指定されたノードの祖先情報が見つかりませんでした。");
+            return;
+        }
+
+        let selectedNodeData;
+
+        if (/^\d+$/.test(identifier)) {
+            // `n` の場合は `string` に変換して比較
+            selectedNodeData = data.ancestors.find(node => String(node.n) === String(identifier));
+        } else {
+            // `name` の場合
+            selectedNodeData = data.ancestors.find(node => node.name === identifier);
+        }
+
+        //console.log("選択されたノードのデータ:", selectedNodeData); // デバッグ用
+
+        if (!selectedNodeData) {
+            alert("選択されたノードの情報が見つかりませんでした。");
+            return;
+        }
+
+        const ancestors = selectedNodeData.ancestors;
+        document.getElementById('ancestorDisplay').innerText =
+            `選択ノード: ${searchValue}, 先祖: ${ancestors.join(" -> ")}`;
+
+        // ancestors のノードを強調表示
+        highlightAncestors(ancestors);
+
+        // 入力フィールドをリセット
+        document.getElementById('searchInput').value = "";
+        // ドロップダウンを非表示に
+        document.getElementById('searchDropdown').style.display = "none";
+    })
+    .catch(error => console.error("Error fetching ancestors:", error));
+}
+
+/*// ノードの祖先を取得
 function fetchAncestors(name) {
     // 祖先情報を取得
     fetch('/ancestor', {
@@ -1162,8 +2011,9 @@ function fetchAncestors(name) {
         }
     
         const ancestors = selectedNodeData.ancestors;
+        console.log(selectedNodeData);
         document.getElementById('ancestorDisplay').innerText =
-            `選択ノード: ${name}, 先祖: ${ancestors.join(" -> ")}`;
+            選択ノード: ${name}, 先祖: ${ancestors.join(" -> ")};
     
         // ancestors のノードを強調表示
         highlightAncestors(ancestors);
@@ -1174,7 +2024,8 @@ function fetchAncestors(name) {
         document.getElementById('searchDropdown').style.display = "none";
     })
     .catch(error => console.error("Error fetching ancestors:", error));
-    }
+    }*/
+
 
 // 検索候補を取得
 function fetchSearchCandidates() {
@@ -1256,27 +2107,72 @@ function updatePathDisplay() {
             });
     }
     }
+
+    function mouseover(d) {
+        let nodeColor = d3.select(this).style("fill");
+        let labColor = d3.lab(nodeColor);
+        
+        // Calculate r and theta
+        var r = y(d.y + d.dy / 2); // Average radius of the arc
+        var theta = x(d.x + d.dx) - x(d.x); // Angle in radians
+        var rTheta = r * theta;
     
-function mouseover(d) {
-    let nodeColor = d3.select(this).style("fill");
-    let labColor = d3.lab(nodeColor);
+        let tooltipContent = "";
     
-    // Calculate r and theta
-    var r = y(d.y + d.dy / 2); // Average radius of the arc
-    //var ex = x(d.x + d.dx);
-    //var sx = x(d.x);
-    var theta = x(d.x + d.dx) - x(d.x); // Angle in radians
-    var rTheta = r * theta;
+        if (imageMap[d.n]) {
+            // 辞書から情報を取得
+            let imgData = imageMap[d.n];
+            // **名前の表示（ラテン語 + 英語 + 日本語）**
+            tooltipContent += `<strong>${d.name}</strong><br>`;
+            if (imgData.name_en) tooltipContent += `English: ${imgData.name_en}<br>`;
+            if (imgData.name_jp) tooltipContent += `日本語: ${imgData.name_jp}<br>`;
     
-    tooltip.style("visibility", "visible")
-    .html(`Node: ${d.name}<br>Value: ${d.value}<br>${d.is_merged ? 'Merged count: ' + d.merge_count + '<br>' : ''}r: ${r.toFixed(2)}(${y(d.dy)}), θ: ${theta.toFixed(2)}<br>r * θ: ${rTheta.toFixed(2)}<br>Color (CIELab): ${labColor.toString()}`);
+            if (imgData.multiple_images) {
+                tooltipContent += `<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px;">`;
+                // **複数画像をすべて表示**
+                imgData.multiple_images.forEach(img => {
+                    let imgSrc;
     
-    if (rTheta >= sizeCriterion) {
-        overviewSvg.selectAll("path")
-        .filter(function(node) { return node.name === d.name; })
-        .style("fill", "#ffffff");
+                    // `n` の場合は辞書から画像を取得
+                    if (typeof img === "number" && imageMap[img] && imageMap[img].image) {
+                        imgSrc = `/static/images/${imageMap[img].image}`;
+                    } else {
+                        imgSrc = `/static/images/${img}`;
+                    }
+    
+                    tooltipContent += `<img src="${imgSrc}" alt="${d.name}" style="width: 130px; height: 100px; object-fit: cover;">`;
+                });
+    
+                // Wikipedia のリンクを表示
+                tooltipContent += `<br><a href="${imgData.wiki}" target="_blank">src: Wikipedia</a>`;
+    
+            } else {
+                // **通常の 1 枚画像表示**
+                tooltipContent += `<img src="/static/images/${imgData.image}" alt="${imgData.alt}" style="width: 200px; height: auto; display: block; margin-top: 5px;"><br>`;
+                tooltipContent += `<a href="${imgData.wiki}" target="_blank">src: Wikipedia</a>`;
+            }
+        } else {
+            // 通常のツールチップ内容
+            tooltipContent += `Node: ${d.name}, ${d.n}<br>`;
+            tooltipContent += `Value: ${d.value}<br>`;
+            if (d.is_merged) {
+                tooltipContent += `Merged count: ${d.merge_count}<br>`;
+            }
+            /*
+            tooltipContent += `r: ${r.toFixed(2)}(${y(d.dy)}), θ: ${theta.toFixed(2)}<br>`;
+            tooltipContent += `r * θ: ${rTheta.toFixed(2)}<br>`;
+            tooltipContent += `Color (CIELab): ${labColor.toString()}<br>`;*/
+        }
+        
+        tooltip.style("visibility", "visible").html(tooltipContent);
+    
+        if (rTheta >= sizeCriterion) {
+            overviewSvg.selectAll("path")
+            .filter(function(node) { return node.name === d.name; })
+            .style("fill", "#ffffff");
+        }
     }
-    }
+    
     
 function mouseout(d) {
     tooltip.style("visibility", "hidden");
@@ -1290,7 +2186,7 @@ function mouseout(d) {
         .filter(function(node) { return node.name === d.name; })
         .style("fill", function(node) { return node.overviewColor; });
     }
-    }
+    }       
     
     svg.on("mousemove", function() {
     tooltip.style("top", (d3.event.pageY + 10) + "px")
