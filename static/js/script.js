@@ -58,6 +58,16 @@ svg.append("clipPath")
 // `clip-path` 属性を適用して円形にクリッピング
 svg.attr("clip-path", "url(#circleClip)");
 
+// 画像配置用の別SVGを mainSvg の上に重ねて追加
+var imgSvg = d3.select("body").append("svg")
+    .attr("id", "imgSvg")
+    .attr("width", width+100)
+    .attr("height", height+300)
+    .style("position", "absolute")
+    .style("top", `calc(20% - 150px)`)
+    .style("left", `calc(20% - 50px)`)
+    .style("pointer-events", "none"); // 画像以外は無効化
+
 // ドラッグ可能なバー用の別SVG要素
 var barSvg = d3.select("body").append("svg")
     .attr("id", "barSvg")
@@ -77,7 +87,7 @@ var draggableBar = barSvg.append("rect")
     .attr("x", centerX - 10) // 中央に配置
     .attr("y", centerY - maxradius) // 円周上に配置
     .style("cursor", "grab")
-    .style("fill", "gray")
+    .style("fill", "grey")
     .attr("transform-origin", "10px 25px"); // 長方形の中心を基準に回転
 
 var tooltip = d3.select("body").append("div").attr("class", "tooltip");
@@ -156,10 +166,12 @@ const questions = [
 ];
 
 // ドラッグイベントの設定
-function initializeDrag(nodes, arc, panrentNode) {
+function initializeDrag(nodes, arc, panrentNode, root) {
+    let normalizedAngle = 0;
     return d3.behavior.drag()
         .on("dragstart", function () {
             svg.selectAll("text").style("visibility", "hidden"); // ラベルを非表示
+            imgSvg.selectAll("image").remove();
         })
         .on("drag", function () {
             // d3.eventから座標を取得
@@ -169,7 +181,7 @@ function initializeDrag(nodes, arc, panrentNode) {
             var angle = Math.atan2(mouseY - centerY, mouseX - centerX);
             // 正規化された角度を計算（0から1の範囲）
             var correctedAngle = angle + Math.PI / 2; // 角度の補正
-            var normalizedAngle = (correctedAngle >= 0 ? correctedAngle : (2 * Math.PI + correctedAngle)) / (2 * Math.PI);
+            normalizedAngle = (correctedAngle >= 0 ? correctedAngle : (2 * Math.PI + correctedAngle)) / (2 * Math.PI);
     
             // 新しい座標を計算（長方形の中心を円周上に配置する）
             var newX = centerX + (maxradius + 25) * Math.cos(angle) - 10; // x座標
@@ -209,6 +221,9 @@ function initializeDrag(nodes, arc, panrentNode) {
             // ラベルを再描画
             if (!config.taskMode) {
                 updateLabels(nodes, arc);
+                if (imageMap[root.n]) {
+                    drawCircularIcons(root, nodes, normalizedAngle);
+                }
             }
         });
     }
@@ -302,9 +317,122 @@ function updateLabelsForTask(nodes, nodeNames) {
             textElement.attr("font-size", "25px").text(labelSymbol);
         });
 }
+
+// 環状にアイコン画像を描画
+function drawCircularIcons(d, nodes, normalizedAngle = 0) {
+    if (!imageMap[d.n] || !imageMap[d.n].multiple_images) return;
+
+    let infoPanel = d3.select("#info-panel");
+    let nodeName = d3.select("#node-name");
+    let nodeImage = d3.select("#node-image");
+    let nodeWiki = d3.select("#node-wiki");
+    let gridContainer = d3.select("#grid-container");
+    const imgData = imageMap[d.n];
+    const iconSize = 60;
+    const radiusBase = maxradius + 40;
+    const angleThreshold = 8 * (Math.PI / 180);
+    const usedAngles = [];
+
+    // 名前表示
+    let nameContent = `<strong>${d.name}</strong><br>`;
+    if (imgData.name_en) nameContent += `<span style="font-size: 10px;">English: ${imgData.name_en}</span><br>`;
+    if (imgData.name_jp) nameContent += `<span style="font-size: 10px;">日本語: ${imgData.name_jp}</span><br>`;
+    nodeName.html(nameContent);
+    nodeWiki.attr("href", imgData.wiki).style("display", "inline-block");
+    gridContainer.style("display", "none");
+
+    imgSvg.selectAll("image").remove();
+
+    imgData.multiple_images.forEach((img) => {
+        let imgSrc;
+        if (typeof img === "number" && imageMap[img]?.image) {
+            imgSrc = `/static/images/${imageMap[img].image}`;
+        } else {
+            imgSrc = `/static/images/${img}`;
+        }
+
+        fetch('/ancestor', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ n: String(img) })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error("Fetch failed");
+            return response.json();
+        })
+        .then(data => {
+            const selected = data.ancestors.find(a => String(a.n) === String(img));
+            if (!selected) return;
+
+            const ancestorNames = selected.ancestors;
+            let deepest = null;
+            nodes.forEach(n => {
+                if (ancestorNames.includes(n.name)) {
+                    if (!deepest || n.depth > deepest.depth) {
+                        deepest = n;
+                    }
+                }
+            });
+
+            let dragOffset = 2 * Math.PI * normalizedAngle;
+            let baseAngle = deepest ? -Math.max(0, Math.min(2 * Math.PI, x(deepest.x + deepest.dx / 2))) + offset + dragOffset : Math.PI / 2;
+            let radiusOffset = 0;
+            let tries = 0;
+            const maxTries = 10;
+
+            while (usedAngles.some(a => Math.abs(baseAngle - a) < angleThreshold) && tries < maxTries) {
+                baseAngle += angleThreshold;
+                radiusOffset += 10;
+                tries++;
+            }
+
+            usedAngles.push(baseAngle);
+            const finalRadius = radiusBase + radiusOffset;
+            const xPos = (width + 100) / 2 + finalRadius * Math.cos(baseAngle) - iconSize / 2;
+            const yPos = (height + 300) / 2 + finalRadius * Math.sin(baseAngle) - iconSize / 2;
+
+            const tooltipContent = (() => {
+                let content = "";
+                if (typeof img === "number" && imageMap[img]) {
+                    const info = imageMap[img];
+                    if (info.name_en) content += `<strong>English:</strong> ${info.name_en}<br>`;
+                    if (info.name_jp) content += `<strong>日本語:</strong> ${info.name_jp}<br>`;
+                }
+                return content;
+            })();
+
+            imgSvg.append("image")
+                .attr("xlink:href", imgSrc)
+                .attr("x", xPos)
+                .attr("y", yPos)
+                .attr("width", iconSize)
+                .attr("height", iconSize)
+                .attr("clip-path", "circle(50%)")
+                .attr("preserveAspectRatio", "xMidYMid slice")
+                .style("cursor", "pointer")
+                .style("pointer-events", "auto")
+                .attr("data-id", img)
+                .on("click", function () {
+                    fetchAncestors(img);
+                })
+                .on("mouseover", function () {
+                    tooltip.style("visibility", "visible").html(`<strong>${deepest?.name || ""}</strong><br>${tooltipContent}`);
+                })
+                .on("mousemove", function () {
+                    tooltip.style("top", (d3.event.pageY + 10) + "px")
+                           .style("left", (d3.event.pageX + 10) + "px");
+                })
+                .on("mouseout", function () {
+                    tooltip.style("visibility", "hidden");
+                });
+        })
+        .catch(err => {
+            console.error("Ancestor fetch failed:", err);
+        });
+    });
+}    
     
-    
-    
+/*    
 // 初期化関数
 function getRandomNodeName(nodes) {
     // 条件を満たすノードをフィルタ
@@ -437,7 +565,8 @@ function fortask_size4(nodes, initialDepth, maxDifference) {
     console.warn(`No nodes with size difference <= ${maxDifference} and d.dx > 0.3 at any depth.`);
     triggerNextTask();
     return [null, null];
-}
+}*/
+
 function triggerNextTask() {
     console.log("Triggering next task...");
     const nextButton = document.getElementById("nextButton");
@@ -529,7 +658,7 @@ function generateQuestion(nodes, task, node1, node2, depth, ans_num) {
             isAnswered = true; // 回答済みに設定
             triggerNextTask();
         }
-    }, 3000);
+    }, 1000);
 
     // 「次へ」ボタンのクリック処理
     nextButton.onclick = () => {
@@ -555,7 +684,7 @@ function AnswerSize1(num) {
     }
 }
 
-function AnswerSize2(nodes, depth) {
+/*function AnswerSize2(nodes, depth) {
     // 指定の深さのノードをフィルタ
     const depthNodes = nodes.filter(d => d.depth === depth);
     if (depthNodes.length === 0) {
@@ -566,7 +695,7 @@ function AnswerSize2(nodes, depth) {
     // 最大の d.dx を持つノードを選ぶ
     const largestNode = depthNodes.reduce((max, node) => (node.dx > max.dx ? node : max), depthNodes[0]);
     return largestNode.name;
-}
+}*/
 
 function drawLayerCircles(depth) {
     // 現在のグラフからすべての円を削除
@@ -604,7 +733,7 @@ function drawLayerCircles(depth) {
         .style("stroke-dasharray", "4,4");
 }
 
-function calculateAnswerHierarchical(node1, node2, nodes) {
+/*function calculateAnswerHierarchical(node1, node2, nodes) {
     // ノードをたどり、親のリストを作成
     function getParentList(node) {
         const parentList = [];
@@ -631,7 +760,7 @@ function calculateAnswerHierarchical(node1, node2, nodes) {
     // 最初に一致する親ノードを探す
     const commonAncestor = node1Parents.find(parent => node2Parents.includes(parent));
     return commonAncestor ? commonAncestor.name : null;
-}
+}*/
 
 // 回答の正誤判定とスコア計算を行う関数
 function handleAnswerSubmission(correctAnswer, userAnswer) {
@@ -841,7 +970,7 @@ function initializeforTask(task) {
         });
 }
 
-function initializeGraphWithTopNode(topNode) {
+/*function initializeGraphWithTopNode(topNode) {
     // 現在のグラフ情報から該当ノードを探索
     let currentNode = null;
 
@@ -960,7 +1089,7 @@ function initializeGraphWithTopNode(topNode) {
         updateNodeCount(nodes);
     })
     .catch(error => console.error("Error fetching subtree:", error));
-}
+}*/
 // 初期データを `/data` エンドポイントから取得し、描画
 fetch('/data', {
     method: 'POST',
@@ -1165,7 +1294,7 @@ function drawChart(root) {
             return d.overviewColor;*/
         });
     
-    var drag = initializeDrag(nodes, arc, parentNode=NaN); // ドラッグ設定を適用
+    var drag = initializeDrag(nodes, arc, parentNode=NaN, root=NaN); // ドラッグ設定を適用
     draggableBar.call(drag); // ドラッグ可能なバーに適用
     updateLabels(nodes, arc); // ラベルを初期描画
     
@@ -1197,6 +1326,13 @@ function computeNodeColor(d, depth, startAngle, endAngle) {
 function click(d) {
     var startTime = performance.now();
     var clickedNodeParent = d.parent;
+    // 既存の画像を消去
+    //imgSvg.selectAll("image").style("display", "none");
+    /*try {
+        imgSvg.selectAll("image").remove();
+    } catch (error) {
+        console.error("Error removing images:", error);
+    }*/
     //console.log("Clicked Node", d.name);
     // クリックされたノードが辞書に存在するか確認
     let infoPanel = d3.select("#info-panel");
@@ -1210,76 +1346,9 @@ function click(d) {
     nodeImage.style("display", "none").attr("src", "");
     nodeWiki.style("display", "none").attr("href", "");
     gridContainer.html("").style("display", "none"); // グリッドの初期化
+    
 
-    if (imageMap[d.n]) {
-        let imgData = imageMap[d.n];
-        let nameContent = `<strong>${d.name}</strong><br>`;
-        if (imgData.name_en) nameContent += `<span style="font-size: 14px;">English: ${imgData.name_en}</span><br>`;
-        if (imgData.name_jp) nameContent += `<span style="font-size: 14px;">日本語: ${imgData.name_jp}</span><br>`;
-        nodeName.html(nameContent);
-
-        if (imgData.multiple_images) {
-            // **複数画像のグリッド表示**
-            //nodeName.text(d.name);
-
-            let gridColumns = imgData.grid_columns || 3;
-            let gridRows = imgData.grid_rows || 6;
-            let panelWidth = 300;
-            let panelHeight = 500; // info-panel の高さ
-            let imgWidth = panelWidth / gridColumns - 5;
-            let imgHeight = panelHeight / gridRows - 10; // 余白を考慮
-
-            gridContainer.style("display", "grid")
-                .style("grid-template-columns", `repeat(${gridColumns}, 1fr)`)
-                .style("grid-template-rows", `repeat(${gridRows}, 1fr)`)
-                .style("gap", "5px");
-
-            imgData.multiple_images.forEach(img => {
-                let imgSrc;
-                let imgNodeId = img; // 初期値として `n` を使用
-
-                if (typeof img === "number" && imageMap[img] && imageMap[img].image) {
-                    imgSrc = `/static/images/${imageMap[img].image}`;
-                } else {
-                    imgSrc = `/static/images/${img}`;
-                }
-
-                let imgElement = gridContainer.append("img")
-                    .attr("src", imgSrc)
-                    .style("width", `${imgWidth}px`)
-                    .style("height", `${imgHeight}px`)
-                    .style("object-fit", "cover")
-                    .style("display", "block")
-                    .style("margin", "auto")
-                    .style("cursor", "pointer") // クリック可能にする
-                    .attr("data-id", imgNodeId); // ノードIDをセット
-
-                // **画像クリック時に `fetchAncestors()` を実行**
-                imgElement.on("click", function () {
-                    let selectedId = d3.select(this).attr("data-id");
-                    console.log(`id : ${selectedId}, type : ${typeof selectedId}`);
-
-                    if (typeof selectedId === "number") {
-                        fetchAncestors(selectedId); // `n` をそのまま渡す
-                    } else {
-                        fetchAncestors(selectedId); // `name` をそのまま渡す
-                    }
-                });
-            });
-
-            // Wikipedia のリンクを設定
-            nodeWiki.attr("href", imgData.wiki)
-                .style("display", "inline-block");
-        } else {
-            // **単一画像の通常表示**
-            //nodeName.text(d.name);
-            nodeImage.attr("src", `/static/images/${imgData.image}`)
-                .attr("alt", imgData.alt)
-                .style("display", "block");
-            nodeWiki.attr("href", imgData.wiki)
-                .style("display", "inline-block");
-        }
-    }
+    
     // クリックノードの真のルートノードからの深さを再帰的に求める
     function getNodeDepth(node, previousDepth) {
         //console.log(`${node.name}の前のクリック深さ：${previousDepth}`);
@@ -1393,8 +1462,10 @@ function click(d) {
                             return null; // 適用しない場合はnullを返す
                         }
                     })
-                    .each("end", function() {
-                        finalizeUpdate(nodes, parentNode);
+                    .each("end", function(e, i) {
+                        if(i===0) {
+                            finalizeUpdate(nodes, parentNode)
+                        }
                     });
                     previousTopNode = clickedNode;
                     previousClickDepth = clicknodeDepth;
@@ -1525,6 +1596,7 @@ function click(d) {
         // 中心角度の計算
         const opposingAngle = (startAngle + endAngle) / 2 - Math.PI;
         offset -= opposingAngle; // クリックによるオフセットを調整
+        console.log(`遷移後のoffset: ${offset}`);
         const colorMap = {};
         svg.selectAll("path").each(function(d) {
             // 各ノードの名前をキーに現在の色を保存
@@ -1609,7 +1681,7 @@ function click(d) {
             previousTopNode = d;
             updateLabels(nodes, arc);
             previousClickDepth = clicknodeDepth;
-            finalizeUpdate(nodes, parentNode)
+            finalizeUpdate(nodes, parentNode);
         })}
     }
     
@@ -1621,7 +1693,6 @@ function click(d) {
         // 中心角度の計算
         const opposingAngle = (startAngle + endAngle) / 2 - Math.PI;
         // クリック時の offset 更新
-        offset -= opposingAngle; // クリックによるオフセットを調整
         var clickedNodeParent = d.parent;
         var stepdepth = predepth + d.depth;
         const colorMap = {};
@@ -1646,19 +1717,21 @@ function click(d) {
         })
         //.then(response => response.json())
         .then(response => {
+            
             const contentLength = response.headers.get('content-length');
-            //console.log(`Response size: ${contentLength} bytes`);  // 受信データのサイズを表示
+            //console.log(`${d.name}, Response size: ${contentLength} bytes`);  // 受信データのサイズを表示
+            
             return response.json();
         })
         .then(data => {
             var subtree = data.newtree;
             var parentNode = data.parent;
-        
             var endTime = performance.now();
             var timeTaken = endTime - startTime;
             //console.log(`Time taken: ${timeTaken.toFixed(2)} ms`);
             // クリック前の表示をキャンバスに保存
             var svgElement = document.querySelector("#mainSvg");
+            offset -= opposingAngle;
 
             // テキスト要素を一時的に削除
             var textElements = svgElement.querySelectorAll("text");
@@ -1760,23 +1833,14 @@ function click(d) {
             d3.select("#copySvg")
                 .style("opacity", 0.3)
                 .transition()
-                .duration(4000)
+                .duration(3000)
                 .style("opacity", 0);
 
-                // トランジション中はクリックとホバーを無効化
-
-                // クリック時に `mouseout` を強制発火させる
-                // クリック時にツールチップを非表示にする
-                // クリック時にツールチップを非表示にする
                 tooltip.style("visibility", "hidden");
-                /*svg.selectAll("path")
-                    .on("click", null)
-                    .on("mouseover", null)
-                    .on("mouseout", null);*/
             
                 svg.transition()
                     //.delay(6000)
-                    .duration(4000)
+                    .duration(3000)
                     .tween("scale", function() {
                         let xr = d3.interpolate(x.range(), [0, 2 * Math.PI]),
                             yr = d3.interpolate(y.range(), [0, maxradius]);
@@ -1803,12 +1867,12 @@ function click(d) {
                     })
                     .each("end", function(e, i) {
                         if (i === 0) {
+
                             if (config.timing === "after") {
                                 path.style("fill", function(d) {
                                         return fillColor(d);
                                     })
                             }
-                            finalizeUpdate(nodes, parentNode)
                 
                             // 次のノードの startAngle と endAngle を求める
                             var nextStartAngle, nextEndAngle;
@@ -1817,17 +1881,23 @@ function click(d) {
                                 if (nextNode) {
                                     nextStartAngle = x(nextNode.x);
                                     nextEndAngle = x(nextNode.x + nextNode.dx);
+                                    // ★ offset を考慮して角度を調整
+                                    //nextStartAngle -= offset;
+                                    //nextEndAngle -= offset;
                                 }
+                            } else {
+                                finalizeUpdate(nodes, parentNode)
                             }
                 
                             // 次のステップ（固定の step イベント）を呼び出し
                             dispatch.step(nextStartAngle, nextEndAngle);
+                            /*
                             // トランジション終了後にクリックとホバーを再有効化
                             svg.selectAll("path")
                                 .style("pointer-events", "auto")
                                 .on("click", handleNodeClick)
                                 .on("mouseover", mouseover)
-                                .on("mouseout", mouseout);
+                                .on("mouseout", mouseout);*/
                         }
                     });
 
@@ -1837,8 +1907,11 @@ function click(d) {
             //console.log(`${d.name}クリック後の深さ：${previousClickDepth}`);
         })
         .catch(error => console.error("Error fetching subtree data:", error));
-        }
+        } // performClickAction 終了
         function finalizeUpdate(nodes, parentNode) {
+            if (imageMap[d.n]) {
+                drawCircularIcons(d, nodes);
+            } 
             if (parentNode) {
                 parentNode.depth = 0;
                 parentNode.x = 0;
@@ -1865,16 +1938,31 @@ function click(d) {
                     .on("mouseout", mouseout);
             }
             // ドラッグバーを追加
-            var drag = initializeDrag(nodes, arc, parentNode); // ドラッグ設定を適用
+            var drag = initializeDrag(nodes, arc, parentNode, d); // ドラッグ設定を適用
             draggableBar.call(drag); // ドラッグバーに適用
         
             // ラベル再描画
             updateLabels(nodes, arc);
             updateNodeCount(nodes);
+        } 
+    } // Click関数終了
+    
+function getDeepestAncestorAngle(ancestors) {
+    let deepest = null;
+    svg.selectAll("path").each(function(d) {
+        if (ancestors.includes(d.name)) {
+            if (!deepest || d.depth > deepest.depth) {
+                deepest = d;
+            }
         }
-    }
+    });
+    if (!deepest) return Math.PI / 2; // デフォルト角度
+    const angle = x(deepest.x + deepest.dx / 2);
+    return angle;
+}
+    
 
-// ノードのクリック処理
+    // ノードのクリック処理
 function handleNodeClick(d) {
     if (config.interaction) {
         // 通常のクリック処理（ズームインなど）
@@ -1990,41 +2078,6 @@ function fetchAncestors(identifier) {
     })
     .catch(error => console.error("Error fetching ancestors:", error));
 }
-
-/*// ノードの祖先を取得
-function fetchAncestors(name) {
-    // 祖先情報を取得
-    fetch('/ancestor', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: name })
-    })
-    .then(response => response.json())
-    .then(data => {
-        const selectedNodeData = data.ancestors.find(node => node.name === name);
-    
-        if (!selectedNodeData) {
-            alert("選択されたノードの情報が見つかりませんでした。");
-            return;
-        }
-    
-        const ancestors = selectedNodeData.ancestors;
-        console.log(selectedNodeData);
-        document.getElementById('ancestorDisplay').innerText =
-            選択ノード: ${name}, 先祖: ${ancestors.join(" -> ")};
-    
-        // ancestors のノードを強調表示
-        highlightAncestors(ancestors);
-    
-        // 入力フィールドをリセット
-        document.getElementById('searchInput').value = "";
-        // ドロップダウンを非表示に
-        document.getElementById('searchDropdown').style.display = "none";
-    })
-    .catch(error => console.error("Error fetching ancestors:", error));
-    }*/
 
 
 // 検索候補を取得

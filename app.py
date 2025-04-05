@@ -25,7 +25,7 @@ class TreeOfLife:
         if type(n) == int:
             return self.lives[n]
 
-    def subtree(self, name=None, n=None, depth=2**32, merge_factor=1000):
+    def subtree(self, name=None, n=None, depth=2**32, merge_factor=1000): # 2090000 or 1000
         if type(name) == str: life = self.life(name=name)
         elif type(n) == int: life = self.life(n=n)
         else: return
@@ -49,6 +49,7 @@ class TreeOfLife:
 
             for c in life['children']:
                 child_life = self.life(n=c)
+                
                 if child_life['value'] <= threshold:
                     merge_group.append(child_life)
                 else:

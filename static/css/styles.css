@@ -1,3 +1,28 @@
+#info-panel {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    width: 200px;
+    max-height: 400px;
+    padding: 10px;
+    border: 1px solid #ccc;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+}
+.circular-image {
+    z-index: 10;
+    transition: transform 0.2s;
+}
+.circular-image:hover {
+    transform: scale(1.2);
+}
+
+#grid-container {
+    flex-grow: 1; /* 高さいっぱいに拡張 */
+    display: grid;
+    gap: 5px;
+}
 .arc text {
     font: 10px sans-serif;
     text-anchor: middle;
@@ -42,3 +67,4 @@
 #searchDropdown div:hover {
     background-color: #f0f0f0;
 }
+
