@@ -118,53 +118,6 @@ d3.json("/static/data/image_mapping.json", function(error, data) {
     imageMap = data;
 });
 
-
-// 質問リスト
-const questions = [
-    {
-        id : "size1",
-        type: "select",
-        text: "★の扇形の中心角は全体の約何%を占めていると考えますか？",
-        options: ["10%未満", "10%~30%", "30%~50%", "50%以上"],
-        onAnswer: (selected) => {
-            document.getElementById("answerInput").value = selected;
-        }
-    },
-    {
-        id : "size2",
-        type: "click",
-        text: "{depth}層目で最も大きい扇形を持つノードをクリックしてください。",
-        onAnswer: (node) => {
-            document.getElementById("answerInput").value = node.n;
-        }
-    },
-    {
-        id: "size3",
-        type: "select",
-        text: "★は同一層上の扇型の中で、何番目に大きいですか？",
-        options: ["1番目", "それ以外"],
-        onAnswer: (selected) => {
-            document.getElementById("answerInput").value = selected;
-        }
-    },
-    {
-        id: "size4",
-        type: "click",
-        text: "★と⚫︎で、どちらが大きいですか？",
-        onAnswer: (node) => {
-            document.getElementById("answerInput").value = node.n;
-        }
-    },
-    {
-        id : "hierarchical",
-        type: "click",
-        text: "サブツリー内で、★と⚫︎の共通祖先は存在しますか？存在する場合は共通祖先の中で最も2つのノードに近い層のノードを選択してください。",
-        onAnswer: (node) => {
-            document.getElementById("answerInput").value = node.n;
-        }
-    }
-];
-
 // ドラッグイベントの設定
 function initializeDrag(nodes, arc, panrentNode, root) {
     let normalizedAngle = 0;
@@ -252,71 +205,6 @@ function rotateChart(normalizedAngle, arc) {
             return Math.PI / 2 - Math.max(0, Math.min(2 * Math.PI, x(d.x + d.dx))) + offset + angleOffset;
         }));
     }
-
-// ラベルを更新する関数
-function updateLabels(nodes, arc) {
-    svg.selectAll("text").remove();
-    
-    svg.selectAll("text")
-        .data(nodes.filter(function(d) {
-            var r = y(d.y + d.dy / 2);
-            var theta = x(d.x + d.dx) - x(d.x);
-            return r * theta >= labelCriterion;
-        }))
-        .enter().append("text")
-        .attr("transform", function(d) {
-            return "translate(" + arc.centroid(d) + ")";
-        })
-        .attr("text-anchor", "middle")
-        .attr("font-size", "10px")
-        .text(function(d) {
-            return d.is_merged ? d.merge_count : d.name;
-        });
-    }
-
-function updateLabelsForTask(nodes, nodeNames) {
-    svg.selectAll("text").remove(); // 全てのラベルを削除
-
-    // 対象ノードに対するラベルを追加
-    svg.selectAll("text")
-        .data(nodes.filter(function(d) {
-            return nodeNames.includes(d.n);
-        }))
-        .enter().append("text")
-        .attr("transform", function(d) {
-            if (config.task === "hierarchical") {
-                // ラベルを中央に配置
-                console.log("hierarchicalタスク");
-                const [centerX, centerY] = arc.centroid(d);
-                return "translate(" + arc.centroid(d) + ")";
-                //return `translate(${centerX}, ${centerY})`;
-            } else {
-                // 通常のランダムな配置
-                const [centerX, centerY] = arc.centroid(d);
-
-                // 中心角度を計算 (atan2で角度取得)
-                const centerAngle = Math.atan2(centerY, centerX);
-
-                // ランダムな角度のずれを追加
-                const angleOffset = (Math.random() - 0.5) * 0.6; // ±0.1ラジアンの範囲でずらす
-                const randomAngle = centerAngle + angleOffset;
-
-                // 半径はそのまま、角度方向のみ変更して新しい位置を計算
-                const radius = Math.sqrt(centerX ** 2 + centerY ** 2);
-                const x = Math.cos(randomAngle) * radius;
-                const y = Math.sin(randomAngle) * radius;
-
-                return `translate(${x}, ${y})`;
-            }
-        })        
-        .attr("text-anchor", "middle")
-        .each(function(d, i) {
-            const textElement = d3.select(this);
-            // ラベルの種類をインデックスに応じて切り替える
-            const labelSymbol = i === 0 ? "★" : "●";
-            textElement.attr("font-size", "25px").text(labelSymbol);
-        });
-}
 
 // 環状にアイコン画像を描画
 function drawCircularIcons(d, nodes, normalizedAngle = 0) {
@@ -430,142 +318,121 @@ function drawCircularIcons(d, nodes, normalizedAngle = 0) {
             console.error("Ancestor fetch failed:", err);
         });
     });
-}    
+}
+
+    // ラベルを更新する関数
+function updateLabels(nodes, arc) {
+    svg.selectAll("text").remove();
     
-/*    
-// 初期化関数
-function getRandomNodeName(nodes) {
-    // 条件を満たすノードをフィルタ
-    const validNodes = nodes.filter(d => {
-        return d.dx > 0.07 && d.dx < 1;
-    });
-
-    if (validNodes.length === 0) {
-        console.warn("No valid nodes found for label criterion.");
-        return null; // 条件を満たすノードがなければ null を返す
-    }
-
-    // フィルタされたノードからランダムに選択
-    const randomIndex = Math.floor(Math.random() * validNodes.length);
-    return validNodes[randomIndex].name;
-}
-
-function getTwoRandomNodesAtSameDepth(nodes) {
-    // 深さごとにノードを手動でグループ化
-    const depthGroups = {};
-    nodes.forEach(d => {
-        if (!depthGroups[d.depth]) {
-            depthGroups[d.depth] = [];
-        }
-        depthGroups[d.depth].push(d);
-    });
-
-    // グループ化された深さを取得し、ランダムに選ぶ（深い層ほど高確率）
-    const depths = Object.keys(depthGroups).map(Number).filter(depth => depth > 1); // 深さのリストを取得
-    let validNodes = [];
-    let selectedDepth = null;
-
-    // 条件を満たす validNodes が見つかるまで繰り返し
-    while (depths.length > 0) {
-        const weightedDepthIndex = Math.floor(Math.random() ** 2 * depths.length);
-        selectedDepth = depths.splice(weightedDepthIndex, 1)[0]; // 選択した深さを depths から除外
-
-        // 選ばれた深さのノードをフィルタ
-        validNodes = (depthGroups[selectedDepth] || []).filter(d => {
-            const r = y(d.y + d.dy / 2); // 半径を計算
-            const theta = x(d.x + d.dx) - x(d.x); // 角度を計算
-            return r * theta >= labelCriterion && theta < 2 * Math.PI;
+    svg.selectAll("text")
+        .data(nodes.filter(function(d) {
+            var r = y(d.y + d.dy / 2);
+            var theta = x(d.x + d.dx) - x(d.x);
+            return r * theta >= labelCriterion;
+        }))
+        .enter().append("text")
+        .attr("transform", function(d) {
+            return "translate(" + arc.centroid(d) + ")";
+        })
+        .attr("text-anchor", "middle")
+        .attr("font-size", "10px")
+        .text(function(d) {
+            return d.is_merged ? d.merge_count : d.name;
         });
+    }
 
-        if (validNodes.length >= 2) {
-            break; // 十分なノードが見つかった場合にループを終了
+// task
+// task
+// ユーザーテスト処理開始 task用
+// 質問リスト
+const questions = [
+    {
+        id : "size1",
+        type: "select",
+        text: "★の扇形の中心角は全体の約何%を占めていると考えますか？",
+        options: ["10%未満", "10%~30%", "30%~50%", "50%以上"],
+        onAnswer: (selected) => {
+            document.getElementById("answerInput").value = selected;
+        }
+    },
+    {
+        id : "size2",
+        type: "click",
+        text: "{depth}層目で最も大きい扇形を持つノードをクリックしてください。",
+        onAnswer: (node) => {
+            document.getElementById("answerInput").value = node.n;
+        }
+    },
+    {
+        id: "size3",
+        type: "select",
+        text: "★は同一層上の扇型の中で、何番目に大きいですか？",
+        options: ["1番目", "それ以外"],
+        onAnswer: (selected) => {
+            document.getElementById("answerInput").value = selected;
+        }
+    },
+    {
+        id: "size4",
+        type: "click",
+        text: "★と⚫︎で、どちらが大きいですか？",
+        onAnswer: (node) => {
+            document.getElementById("answerInput").value = node.n;
+        }
+    },
+    {
+        id : "hierarchical",
+        type: "click",
+        text: "サブツリー内で、★と⚫︎の共通祖先は存在しますか？存在する場合は共通祖先の中で最も2つのノードに近い層のノードを選択してください。",
+        onAnswer: (node) => {
+            document.getElementById("answerInput").value = node.n;
         }
     }
+];
 
-    if (validNodes.length < 2) {
-        console.warn(`Not enough valid nodes at depth ${selectedDepth} to select two.`);
-        return [null, null];
-    }
+function updateLabelsForTask(nodes, nodeNames) {
+    svg.selectAll("text").remove(); // 全てのラベルを削除
 
-    // 最初のノードをランダムに選択
-    const firstIndex = Math.floor(Math.random() * validNodes.length);
+    // 対象ノードに対するラベルを追加
+    svg.selectAll("text")
+        .data(nodes.filter(function(d) {
+            return nodeNames.includes(d.n);
+        }))
+        .enter().append("text")
+        .attr("transform", function(d) {
+            if (config.task === "hierarchical") {
+                // ラベルを中央に配置
+                console.log("hierarchicalタスク");
+                const [centerX, centerY] = arc.centroid(d);
+                return "translate(" + arc.centroid(d) + ")";
+                //return `translate(${centerX}, ${centerY})`;
+            } else {
+                // 通常のランダムな配置
+                const [centerX, centerY] = arc.centroid(d);
 
-    // 範囲を設定（インデックスが遠すぎないよう制限）
-    const range = Math.max(1, Math.floor(validNodes.length / 4)); // 全体の1/4を範囲に設定
-    const minIndex = Math.max(0, firstIndex - range);
-    const maxIndex = Math.min(validNodes.length - 1, firstIndex + range);
+                // 中心角度を計算 (atan2で角度取得)
+                const centerAngle = Math.atan2(centerY, centerX);
 
-    // 範囲内で2つ目のノードをランダムに選択
-    let secondIndex;
-    do {
-        secondIndex = Math.floor(Math.random() * (maxIndex - minIndex + 1)) + minIndex;
-    } while (secondIndex === firstIndex); // インデックスが同じ場合は再選択
+                // ランダムな角度のずれを追加
+                const angleOffset = (Math.random() - 0.5) * 0.6; // ±0.1ラジアンの範囲でずらす
+                const randomAngle = centerAngle + angleOffset;
 
-    // 選んだ2つのノードの名前を返す
-    return [validNodes[firstIndex].name, validNodes[secondIndex].name];
+                // 半径はそのまま、角度方向のみ変更して新しい位置を計算
+                const radius = Math.sqrt(centerX ** 2 + centerY ** 2);
+                const x = Math.cos(randomAngle) * radius;
+                const y = Math.sin(randomAngle) * radius;
+
+                return `translate(${x}, ${y})`;
+            }
+        })        
+        .attr("text-anchor", "middle")
+        .each(function(d, i) {
+            const textElement = d3.select(this);
+            // ラベルの種類をインデックスに応じて切り替える
+            const labelSymbol = i === 0 ? "★" : "●";
+            textElement.attr("font-size", "25px").text(labelSymbol);
+        });
 }
-
-function fortask_size3(nodes, depth, rank) {
-    // 指定された深さのノードを取得
-    const depthNodes = nodes.filter(d => d.depth === depth);
-
-    if (depthNodes.length === 0) {
-        console.warn(`No nodes found at depth ${depth}.`);
-        return null;
-    }
-
-    // d.dx の降順でソート
-    depthNodes.sort((a, b) => b.dx - a.dx);
-
-    // ランクに応じたノードを返す
-    return depthNodes[rank - 1]; // ランクは1始まりなので -1
-}
-
-function fortask_size4(nodes, initialDepth, maxDifference) {
-    // 深さごとにノードをグループ化
-    const depthGroups = {};
-    nodes.forEach(d => {
-        if (!depthGroups[d.depth]) {
-            depthGroups[d.depth] = [];
-        }
-        depthGroups[d.depth].push(d);
-    });
-
-    // 全ての深さをリスト化し、ランダムな順序で探索
-    const depths = Object.keys(depthGroups).map(Number).sort(() => Math.random() - 0.5);
-
-    let validNodes = [];
-    let selectedDepth = initialDepth;
-
-    // 条件を満たすノードが見つかるまで探索
-    for (const depth of depths) {
-        validNodes = (depthGroups[depth] || []).filter(d => d.dx > 0.1);
-        if (validNodes.length >= 2) {
-            selectedDepth = depth; // 条件を満たす深さを更新
-            break;
-        }
-    }
-
-    if (validNodes.length < 2) {
-        console.warn(`Not enough valid nodes across all depths with d.dx > 0.2 to compare.`);
-        triggerNextTask();
-        return [null, null];
-    }
-
-    // d.dx の昇順でソート
-    validNodes.sort((a, b) => a.dx - b.dx);
-
-    // 差が maxDifference 以下のペアを探す
-    for (let i = 0; i < validNodes.length - 1; i++) {
-        if (Math.abs(validNodes[i].dx - validNodes[i + 1].dx) <= maxDifference) {
-            return [validNodes[i], validNodes[i + 1]];
-        }
-    }
-
-    console.warn(`No nodes with size difference <= ${maxDifference} and d.dx > 0.3 at any depth.`);
-    triggerNextTask();
-    return [null, null];
-}*/
 
 function triggerNextTask() {
     console.log("Triggering next task...");
@@ -581,7 +448,7 @@ function generateQuestion(nodes, task, node1, node2, depth, ans_num) {
     const questionArea = document.getElementById("questionArea");
     const questionText = document.getElementById("questionText");
     const answerArea = document.getElementById("answerArea");
-    console.log(`現在の問題：${task}`);
+    //console.log(`現在の問題：${task}`);
 
     // ランダムな質問を選択
     const Question = questions.find(question => question.id === task);
@@ -658,7 +525,7 @@ function generateQuestion(nodes, task, node1, node2, depth, ans_num) {
             isAnswered = true; // 回答済みに設定
             triggerNextTask();
         }
-    }, 1000);
+    }, 3000);
 
     // 「次へ」ボタンのクリック処理
     nextButton.onclick = () => {
@@ -683,19 +550,6 @@ function AnswerSize1(num) {
         return "50%以上";
     }
 }
-
-/*function AnswerSize2(nodes, depth) {
-    // 指定の深さのノードをフィルタ
-    const depthNodes = nodes.filter(d => d.depth === depth);
-    if (depthNodes.length === 0) {
-        console.warn(`No nodes found at depth ${depth}.`);
-        return null;
-    }
-
-    // 最大の d.dx を持つノードを選ぶ
-    const largestNode = depthNodes.reduce((max, node) => (node.dx > max.dx ? node : max), depthNodes[0]);
-    return largestNode.name;
-}*/
 
 function drawLayerCircles(depth) {
     // 現在のグラフからすべての円を削除
@@ -733,35 +587,6 @@ function drawLayerCircles(depth) {
         .style("stroke-dasharray", "4,4");
 }
 
-/*function calculateAnswerHierarchical(node1, node2, nodes) {
-    // ノードをたどり、親のリストを作成
-    function getParentList(node) {
-        const parentList = [];
-        let current = node; // ノードを直接更新しないための変数
-
-        while (current && current.parent) {
-            parentList.push(current); // 現在のノードをリストの先頭に追加
-            current = current.parent; // 親ノードを検索
-        }
-        return parentList;
-    }
-
-    const node1Obj = nodes.find(n => n.name === node1);
-    const node2Obj = nodes.find(n => n.name === node2);
-
-    if (!node1Obj || !node2Obj) {
-        console.warn("One or both nodes not found.");
-        return null;
-    }
-
-    const node1Parents = getParentList(node1Obj);
-    const node2Parents = getParentList(node2Obj);
-
-    // 最初に一致する親ノードを探す
-    const commonAncestor = node1Parents.find(parent => node2Parents.includes(parent));
-    return commonAncestor ? commonAncestor.name : null;
-}*/
-
 // 回答の正誤判定とスコア計算を行う関数
 function handleAnswerSubmission(correctAnswer, userAnswer) {
     let score = parseInt(localStorage.getItem("score"), 10) || 0;
@@ -787,29 +612,9 @@ function handleAnswerSubmission(correctAnswer, userAnswer) {
     localStorage.setItem("taskResults", JSON.stringify(taskResults));
     
     console.log(`現在の点数: ${score}`);
-
-    // 40問終了時に結果を表示
-    if (questionIndex + 1 === 40) {
-        //displayResults(score, taskResults);
-    }
 }
 
 function displayResults(score, taskResults) {
-    /*
-    const resultContainer = document.getElementById("resultContainer");
-    resultContainer.innerHTML = "タスク結果";
-
-    taskResults.forEach(result => {
-        let resultText = document.createElement("p");
-        resultText.textContent = `問 ${result.question}: ${result.result} YOU → ${result.userAnswer}, 正解 → ${result.correctAnswer}`;
-        resultText.style.fontSize = "6px";
-        resultContainer.appendChild(resultText);
-    });
-
-    let finalScore = document.createElement("h3");
-    finalScore.textContent = `最終スコア: ${localStorage.getItem("score")}/40`;
-    resultContainer.appendChild(finalScore);*/
-
     // CSV ダウンロードボタンを追加
     let downloadButton = document.createElement("button");
     downloadButton.textContent = "CSVをダウンロード";
@@ -824,12 +629,6 @@ function downloadCSV(taskResults) {
         let colorChange = (index < 20) ? 0 : 1; // 1~20個目は0、21~40個目は1
         csvContent += `${result.question},${result.userAnswer},${result.correctAnswer},${result.result},${colorChange}\n`;
     });
-    /*
-    let sortedResults = taskResults.sort((a, b) => a.question - b.question);
-    let csvContent = "\ufeff" + "問題番号,あなたの回答,正解,結果\n"; // UTF-8 BOMを追加
-    taskResults.forEach(result => {
-        csvContent += `${result.question},${result.userAnswer},${result.correctAnswer},${result.result}\n`;
-    });*/
     let blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     let link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -970,126 +769,111 @@ function initializeforTask(task) {
         });
 }
 
-/*function initializeGraphWithTopNode(topNode) {
-    // 現在のグラフ情報から該当ノードを探索
-    let currentNode = null;
+// 問題カウント
+// 現在の問題番号をローカルストレージから取得（初期値は0）
+let currentQuestionIndex = parseInt(localStorage.getItem("currentQuestionIndex"), 10) || 0;
 
-    svg.selectAll("path").each(function(d) {
-        if (d.n === topNode) {
-            currentNode = d; // 該当ノードを取得
-        }
-    });
+// 現在の問題番号を更新する関数
+function updateQuestionCounter(currentIndex, totalQuestions = 40) {
+    const questionCounter = document.getElementById("questionCounter");
+    if (questionCounter) {
+        questionCounter.textContent = `${currentIndex + 1} / ${totalQuestions} 問目`;
+    }
+}
 
-    if (!currentNode) {
-        console.error(`Node with n=${topNode} not found in the current tree.`);
+// 「次へ」ボタンのクリックイベント
+document.getElementById("nextButton").addEventListener("click", function () {
+
+    const currentURL = new URL(window.location.href);
+    const task = config.task;
+    const taskOrder = JSON.parse(localStorage.getItem(`taskOrder_${task}`));
+    const currentTaskNum = parseInt(currentURL.searchParams.get("tasknum"), 10) || config.tasknum;
+
+    let score = parseInt(localStorage.getItem("score"), 10) || 0;
+    let taskResults = JSON.parse(localStorage.getItem("taskResults")) || [];
+
+    //const currentIndex = taskOrder.indexOf(Number(currentTaskNum));
+    const currentIndex = parseInt(localStorage.getItem("currentQuestionIndex"), 10) || 0;
+    const nextIndex = currentIndex + 1;
+    localStorage.setItem("currentQuestionIndex", nextIndex);
+
+    const answerInput = document.getElementById("answerInput");
+    const userAnswer = answerInput ? answerInput.value.trim() : null;
+
+    updateQuestionCounter(currentIndex, 40);
+
+    if (nextIndex > 39) {
+        displayResults(score, taskResults);
+        alert(`終了です。\n合計得点: ${parseInt(localStorage.getItem("score"), 10) || 0} / 40`);
+        localStorage.removeItem("currentQuestionIndex");
+        localStorage.removeItem(`taskOrder_${config.task}`);
+        localStorage.removeItem("score");
+        localStorage.removeItem("taskResults");
+        currentURL.searchParams.delete("tasknum");
+        window.location.href = currentURL.toString();
         return;
     }
 
-    // `startAngle` と `endAngle` を元の木構造で計算
-    const startAngle = x(currentNode.x);
-    const endAngle = x(currentNode.x + currentNode.dx);
-    clicknodeDepth = currentNode.depth;
+    const nextTaskNum = taskOrder[nextIndex];
+    currentURL.searchParams.set("tasknum", nextTaskNum);
 
-    // 中心角度の計算
-    const opposingAngle = (startAngle + endAngle) / 2 - Math.PI;
-    offset -= opposingAngle; // クリックによるオフセットを調整
+    window.location.href = currentURL.toString();
+    /*//  5秒のラグを挿入
+    setTimeout(() => {
+        window.location.href = currentURL.toString();
+    }, 5000);*/
+});
 
-    // ノード色のマップを作成
-    const colorMap = {};
-    svg.selectAll("path").each(function(d) {
-        colorMap[d.name] = d3.select(this).style("fill");
-    });
+// 3. 2. 1のカウントダウンを表示してからタスクを開始する関数
+function showCountdownThenStart(task) {
+    const questionText = document.getElementById("questionText");
+    const questionArea = document.getElementById("questionArea");
+    const countdownNumbers = [3, 2, 1];
 
-    fetch('/subtree', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ n: topNode })
-    })
-    .then(response => response.json())
-    .then(data => {
-        const subtree = data.newtree;
-        const parentNode = data.parent;
+    let index = 0;
+    questionArea.style.display = "block"; // カウントダウン中も表示
 
-        // グラフを即座に更新
-        svg.selectAll("path").remove();
-        svg.selectAll("text").remove();
-
-        // 座標範囲をリセット
-        x.range([0, 2 * Math.PI]);
-        y.range([0, maxradius]);
-
-        const nodes = partition.nodes(subtree);
-
-        var overstartAngle = previousStartAngle + (previousEndAngle - previousStartAngle) * startAngle/(2*Math.PI);
-        var overendAngle = previousStartAngle + (previousEndAngle - previousStartAngle) * endAngle/(2*Math.PI);
-
-        // ノードの描画
-        const path = svg.selectAll("path").data(nodes).enter().append("path")
-            .attr("d", arc)
-            .attr("data-id", d => d.n)
-            .style("fill", function(d) {
-                if (config.colorChange) {
-                    return fillColor(d);
-                }
-                return colorMap[d.name] || computeNodeColor(d, d.depth+clicknodeDepth, overstartAngle, overendAngle);
-            })
-            .style("opacity", d => (d.is_merged ? 0.3 : 1));
-
-        // クリック可能なパスを設定
-        const clickablePaths = path.filter(d => {
-            const r = y(d.y + d.dy / 2);
-            const theta = x(d.x + d.dx) - x(d.x);
-            return r * theta >= sizeCriterion || d === d.parent;
-        });
-
-        clickablePaths.on("click", handleNodeClick)
-            .on("mouseover", mouseover)
-            .on("mouseout", mouseout);
-
-        previousStartAngle = overstartAngle; // 追加：前回の開始角度を保存
-        previousEndAngle = overendAngle; // 追加：前回の終了角度を保存
-        overviewX = d3.scale.linear().range([overstartAngle, overendAngle]);
-        overviewY = d3.scale.linear().range([
-            overmaxradius * clicknodeDepth / maxdepth,
-            overmaxradius * (clicknodeDepth + 4 < maxdepth ? clicknodeDepth + 4 : maxdepth) / maxdepth
-        ]);
-    
-        var overviewArc = d3.svg.arc()
-            .startAngle(function(d) { return Math.PI/2 - Math.max(0, Math.min(2 * Math.PI, overviewX(d.x))); })
-            .endAngle(function(d) { return Math.PI/2 - Math.max(0, Math.min(2 * Math.PI, overviewX(d.x + d.dx))); })
-            .innerRadius(function(d) { return Math.max(0, overviewY(d.y)); })
-            .outerRadius(function(d) { return Math.max(0, overviewY(d.y + d.dy)); });
-    
-        var overviewSvg = d3.select("#overview").select("svg").select("g");
-    
-        overviewSvg.selectAll("path").remove();
-    
-        overviewSvg.selectAll("path")
-            .data(nodes)
-            .enter().append("path")
-            .attr("d", overviewArc)
-            .style("fill", function(d) {
-                const mainPath = svg.select(`path[data-id="${d.n}"]`);
-                if (!mainPath.empty()) {
-                    d.overviewColor = mainPath.style("fill");
-                    return d.overviewColor;
-                }
-            });
-    
-        // ドラッグバーを追加
-        var drag = initializeDrag(nodes, arc, parentNode); // ドラッグ設定を適用
-        draggableBar.call(drag); // ドラッグバーに適用
-    
-        if(config.taskMode) {
-            //generateQuestion(nodes);
-            // 初期化処理
+    const countdownInterval = setInterval(() => {
+        if (index < countdownNumbers.length) {
+            questionText.textContent = countdownNumbers[index];
+            index++;
         } else {
-            updateLabels(nodes, arc);
+            clearInterval(countdownInterval);
+            questionText.textContent = "開始！";
+            setTimeout(() => {
+                initializeforTask(task); // タスク本体を表示
+            }, 500); // 0.5秒だけ「開始！」を見せてから次へ
         }
-        updateNodeCount(nodes);
-    })
-    .catch(error => console.error("Error fetching subtree:", error));
-}*/
+    }, 1000); // 1秒ごとにカウント
+}
+
+(function initializeTaskOrderIfNeeded() {
+    const currentURL = new URL(window.location.href);
+    const task = currentURL.searchParams.get("task");
+    const tasknumParam = currentURL.searchParams.get("tasknum");
+    const taskKey = `taskOrder_${task}`;
+
+    if (currentURL.searchParams.get("tasknum") === null) {
+        const fullSet = Array.from({ length: 40 }, (_, i) => i);
+        const currentTaskNum = Math.floor(Math.random() * 40);
+        const filtered = fullSet.filter(i => i !== currentTaskNum);
+        const shuffled = filtered.sort(() => Math.random() - 0.5);
+        const taskOrder = [currentTaskNum, ...shuffled];
+
+        //console.log(`初期タスク順 : ${taskOrder}, ${taskOrder.length}`);
+        localStorage.setItem(taskKey, JSON.stringify(taskOrder));
+        localStorage.setItem("score", "0");
+        localStorage.setItem("taskResults", JSON.stringify([]));
+        localStorage.setItem("currentQuestionIndex", "0");
+        currentURL.searchParams.set("tasknum", currentTaskNum);
+        window.location.href = currentURL.toString();
+    }
+})();
+
+document.addEventListener("DOMContentLoaded", function () {
+    updateQuestionCounter(currentQuestionIndex, 40); // 初期表示
+});
+
 // 初期データを `/data` エンドポイントから取得し、描画
 fetch('/data', {
     method: 'POST',
@@ -1107,89 +891,17 @@ fetch('/data', {
         drawChart(root);
 
         // `topNode` が指定されている場合に特定のサブツリーを取得して描画
-        if (config.topNode) {
-            //initializeGraphWithTopNode(config.topNode);
-        }
         if (config.task) {
-            initializeforTask(config.task);
+            //initializeforTask(config.task);
+            const currentQuestionIndex = parseInt(localStorage.getItem("currentQuestionIndex"), 10) || 0;
+            if (currentQuestionIndex === 0) {
+                showCountdownThenStart(config.task); // 最初の1問目のみカウントダウン
+            } else {
+                initializeforTask(config.task); // 2問目以降はすぐに開始
+            }
         }
     })
     .catch(error => console.error("Error fetching initial data:", error));
-
-// 問題カウント
-// 現在の問題番号をローカルストレージから取得（初期値は0）
-let currentQuestionIndex = parseInt(localStorage.getItem("currentQuestionIndex"), 10) || 0;
-
-// 現在の問題番号を更新する関数
-function updateQuestionCounter(currentIndex, totalQuestions = 40) {
-    const questionCounter = document.getElementById("questionCounter");
-    if (questionCounter) {
-        questionCounter.textContent = `${currentIndex + 1} / ${totalQuestions} 問目`;
-    }
-}
-
-document.getElementById("nextButton").addEventListener("click", function () {
-    // 現在のURLを取得
-    const currentURL = new URL(window.location.href);
-
-    // `task` と `tasknum` を取得
-    const task = config.task;
-    let taskOrder;
-    if (currentURL.searchParams.get("tasknum") !== null) {
-        taskOrder = JSON.parse(localStorage.getItem(`taskOrder_${task}`))
-    } else {
-        taskOrder = [];
-    }
-    const currentTaskNum = parseInt(currentURL.searchParams.get("tasknum"), 10) || config.tasknum;
-    //console.log(`現在のtasknum : ${currentTaskNum}`);
-    let score = parseInt(localStorage.getItem("score"), 10) || 0;
-    let taskResults = JSON.parse(localStorage.getItem("taskResults")) || [];
-
-    // ランダムな順序が未生成の場合、初期化
-    if (taskOrder.length === 0) {
-        taskOrder = Array.from({ length: 40 }, (_, i) => i).sort(() => Math.random() - 0.5); // 0~39 をランダム順序で生成
-        const index = taskOrder.indexOf(currentTaskNum);
-        // 要素がリストに存在する場合
-        if (index !== -1) {
-            // 対象要素をリストから削除
-            const [item] = taskOrder.splice(index, 1);
-            // 対象要素をリストの先頭に追加
-            taskOrder.unshift(item);
-        }
-        //console.log(`初期タスク順 : ${taskOrder}, ${taskOrder.length}`);
-        localStorage.setItem(`taskOrder_${task}`, JSON.stringify(taskOrder)); // ローカルストレージに保存
-        localStorage.setItem("score", "0");
-        localStorage.setItem("taskResults", JSON.stringify([]));
-    }
-
-    //console.log(`タスク順 : ${taskOrder}, ${taskOrder.length}`);
-
-    const currentIndex = taskOrder.indexOf(Number(currentTaskNum));
-    const nextIndex = currentIndex + 1;
-    localStorage.setItem("currentQuestionIndex", nextIndex); // 新しい値を保存
-
-    // 現在の回答の正誤判定
-    const answerInput = document.getElementById("answerInput");
-    const userAnswer = answerInput ? answerInput.value.trim() : null;
-    updateQuestionCounter(currentIndex, 40);
-
-    // すべてのタスクが完了した場合、終了メッセージを表示
-    if (nextIndex > 39) {
-        displayResults(score, taskResults);
-        alert(`終了です。\n合計得点: ${parseInt(localStorage.getItem("score"), 10) || 0} / 40`);
-        return;
-    }
-
-    const nextTaskNum = taskOrder[nextIndex];
-    currentURL.searchParams.set("tasknum", nextTaskNum); // 次のタスク番号
-    
-    window.location.href = currentURL.toString();
-});
-
-// 初期ロード時に問題番号を設定
-document.addEventListener("DOMContentLoaded", function () {
-    updateQuestionCounter(currentQuestionIndex, 40); // 初期表示
-});
 
 function drawChart(root) {
     var nodes = partition.nodes(root);
@@ -1293,12 +1005,12 @@ function drawChart(root) {
             d.overviewColor = computeNodeColor(d, d.depth, 0, 2*Math.PI); 
             return d.overviewColor;*/
         });
-    
-    var drag = initializeDrag(nodes, arc, parentNode=NaN, root=NaN); // ドラッグ設定を適用
-    draggableBar.call(drag); // ドラッグ可能なバーに適用
-    updateLabels(nodes, arc); // ラベルを初期描画
-    
-    updateNodeCount(nodes);
+    if (!config.task) {
+        var drag = initializeDrag(nodes, arc, null, root=NaN); // ドラッグ設定を適用
+        draggableBar.call(drag); // ドラッグ可能なバーに適用
+        updateLabels(nodes, arc); // ラベルを初期描画
+        updateNodeCount(nodes);
+    }
     }
 
 var previousTopNode = null;
