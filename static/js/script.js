@@ -119,7 +119,7 @@ d3.json("/static/data/image_mapping.json", function(error, data) {
 });
 
 // ドラッグイベントの設定
-function initializeDrag(nodes, arc, panrentNode, root) {
+function initializeDrag(nodes, arc, parentNode, root) {
     let normalizedAngle = 0;
     return d3.behavior.drag()
         .on("dragstart", function () {
@@ -296,7 +296,7 @@ function drawCircularIcons(d, nodes, normalizedAngle = 0) {
                 .attr("width", iconSize)
                 .attr("height", iconSize)
                 .attr("clip-path", "circle(50%)")
-                .attr("preserveAspectRatio", "xMidYMid slice")
+                //.attr("preserveAspectRatio", "xMidYMid slice")
                 .style("cursor", "pointer")
                 .style("pointer-events", "auto")
                 .attr("data-id", img)
@@ -337,7 +337,7 @@ function updateLabels(nodes, arc) {
         .attr("text-anchor", "middle")
         .attr("font-size", "10px")
         .text(function(d) {
-            return d.is_merged ? d.merge_count : d.name;
+            return d.is_merged ? d.merge_count : d.n;
         });
     }
 
@@ -358,7 +358,7 @@ const questions = [
     {
         id : "size2",
         type: "click",
-        text: "{depth}層目で最も大きい扇形を持つノードをクリックしてください。",
+        text: "{depth}層目で最も大きい扇形を持つ領域をクリックしてください。",
         onAnswer: (node) => {
             document.getElementById("answerInput").value = node.n;
         }
@@ -375,7 +375,7 @@ const questions = [
     {
         id: "size4",
         type: "click",
-        text: "★と⚫︎で、どちらが大きいですか？",
+        text: "★と⚫︎で、大きい方をクリックしてください",
         onAnswer: (node) => {
             document.getElementById("answerInput").value = node.n;
         }
@@ -383,7 +383,7 @@ const questions = [
     {
         id : "hierarchical",
         type: "click",
-        text: "サブツリー内で、★と⚫︎の共通祖先は存在しますか？存在する場合は共通祖先の中で最も2つのノードに近い層のノードを選択してください。",
+        text: "サブツリー内で、★と⚫︎の共通祖先は存在しますか？存在する場合は共通祖先の中で最も2つのノードに近い層のノードをクリックしてください。",
         onAnswer: (node) => {
             document.getElementById("answerInput").value = node.n;
         }
@@ -451,33 +451,38 @@ function generateQuestion(nodes, task, node1, node2, depth, ans_num) {
     //console.log(`現在の問題：${task}`);
 
     // ランダムな質問を選択
-    const Question = questions.find(question => question.id === task);
+    const taskId = config.task.startsWith("ex-") ? config.task.slice(3) : config.task;
+    const Question = questions.find(question => question.id === taskId);
+    if (!Question) {
+        console.error(`No question definition found for task: ${config.task}`);
+        return;
+    }
     let answer;
     let isAnswered = false; // 回答済みフラグ
 
-    if (task === "size1") {
+    if (taskId === "size1") {
         answer = AnswerSize1(ans_num); // 正解
         // 質問文を設定
         questionText.textContent = `${Question.text}`;
         // ラベルを更新
         updateLabelsForTask(nodes, [node1]);
     }
-    if (task === "size2") {
+    if (taskId === "size2") {
         answer = String(ans_num);
         questionText.textContent = Question.text.replace("{depth}", depth);
         drawLayerCircles(depth);
     } 
-    if (task === "size3") {
+    if (taskId === "size3") {
         answer = ans_num === 1 ? "1番目" : "それ以外";
         questionText.textContent = `${Question.text}`;
         updateLabelsForTask(nodes, [node1]);
     }
-    if (task === "size4") {
+    if (taskId === "size4") {
         answer = String(ans_num);
         questionText.textContent = `${Question.text}`;
         updateLabelsForTask(nodes, [node1, node2]);
     }
-    if (task === "hierarchical") {
+    if (taskId === "hierarchical") {
         answer = String(ans_num);
         questionText.textContent = `${Question.text}`;
         updateLabelsForTask(nodes, [node1, node2]);
@@ -517,7 +522,17 @@ function generateQuestion(nodes, task, node1, node2, depth, ans_num) {
         });
     }
     answerArea.appendChild(answerInput);
+    // 例題なら正解を表示
+    if (config.task.startsWith("ex-")) {
+        const answerNote = document.createElement("div");
+        answerNote.style.marginTop = "10px";
+        answerNote.style.fontSize = "18px";
+        answerNote.style.color = "green";
+        answerNote.textContent = `正解: ${answer}`;
+        answerArea.appendChild(answerNote);
+    }
     // タイマーで3秒後に次へ進む処理
+    const timeLimit = config.task.startsWith("ex-") ? 10000 : 300;
     const timer = setTimeout(() => {
         if (!isAnswered) { // 未回答の場合のみ処理
             console.log("Time's up! Automatically moving to next task.");
@@ -525,7 +540,7 @@ function generateQuestion(nodes, task, node1, node2, depth, ans_num) {
             isAnswered = true; // 回答済みに設定
             triggerNextTask();
         }
-    }, 3000);
+    }, timeLimit);
 
     // 「次へ」ボタンのクリック処理
     nextButton.onclick = () => {
@@ -615,11 +630,20 @@ function handleAnswerSubmission(correctAnswer, userAnswer) {
 }
 
 function displayResults(score, taskResults) {
+    // 例題のときはCSVボタンを表示しない
+    if (config.task.startsWith("ex-")) {
+        alert(`終了です。\n!!!OKを押さずに!!!、このページを閉じてください。`);
+        return;
+    }
     // CSV ダウンロードボタンを追加
     let downloadButton = document.createElement("button");
     downloadButton.textContent = "CSVをダウンロード";
     downloadButton.onclick = downloadCSV(taskResults);
+    document.body.appendChild(downloadButton);
+    alert(`終了です。\n!!!OKを押さずに!!!、このページを閉じてください。\n合計得点: ${score} / 40`);
 }
+
+
 
 function downloadCSV(taskResults) {
     let sortedResults = taskResults.sort((a, b) => a.question - b.question);
@@ -774,7 +798,7 @@ function initializeforTask(task) {
 let currentQuestionIndex = parseInt(localStorage.getItem("currentQuestionIndex"), 10) || 0;
 
 // 現在の問題番号を更新する関数
-function updateQuestionCounter(currentIndex, totalQuestions = 40) {
+function updateQuestionCounter(currentIndex, totalQuestions) {
     const questionCounter = document.getElementById("questionCounter");
     if (questionCounter) {
         questionCounter.textContent = `${currentIndex + 1} / ${totalQuestions} 問目`;
@@ -800,17 +824,16 @@ document.getElementById("nextButton").addEventListener("click", function () {
     const answerInput = document.getElementById("answerInput");
     const userAnswer = answerInput ? answerInput.value.trim() : null;
 
-    updateQuestionCounter(currentIndex, 40);
+    updateQuestionCounter(currentIndex, config.task.startsWith("ex-") ? 5 : 40);
 
-    if (nextIndex > 39) {
+    const totalQuestions = config.task.startsWith("ex-") ? 5 : 40;
+    if (nextIndex >= totalQuestions) {
         displayResults(score, taskResults);
-        alert(`終了です。\n合計得点: ${parseInt(localStorage.getItem("score"), 10) || 0} / 40`);
+        //alert(`終了です。\n合計得点: ${score} / 40`);
         localStorage.removeItem("currentQuestionIndex");
         localStorage.removeItem(`taskOrder_${config.task}`);
         localStorage.removeItem("score");
         localStorage.removeItem("taskResults");
-        currentURL.searchParams.delete("tasknum");
-        window.location.href = currentURL.toString();
         return;
     }
 
@@ -847,31 +870,77 @@ function showCountdownThenStart(task) {
     }, 1000); // 1秒ごとにカウント
 }
 
-(function initializeTaskOrderIfNeeded() {
+/*(function initializeTaskOrderIfNeeded() {
     const currentURL = new URL(window.location.href);
     const task = currentURL.searchParams.get("task");
     const tasknumParam = currentURL.searchParams.get("tasknum");
     const taskKey = `taskOrder_${task}`;
 
-    if (currentURL.searchParams.get("tasknum") === null) {
-        const fullSet = Array.from({ length: 40 }, (_, i) => i);
+    if (tasknumParam === null) {
+        // 例題なら常に tasknum=0 で開始
+        if (task && task.startsWith("ex-")) {
+            if (!currentURL.searchParams.has("tasknum")) {
+                currentURL.searchParams.set("tasknum", 0);
+                window.location.href = currentURL.toString();
+            }
+            return;
+        }
+        const taskCount = task.startsWith("ex-") ? 5 : 40;
+        const fullSet = Array.from({ length: taskCount }, (_, i) => i);
         const currentTaskNum = Math.floor(Math.random() * 40);
         const filtered = fullSet.filter(i => i !== currentTaskNum);
         const shuffled = filtered.sort(() => Math.random() - 0.5);
-        const taskOrder = [currentTaskNum, ...shuffled];
+        //const taskOrder = [currentTaskNum, ...shuffled];
+        const taskOrder = task.startsWith("ex-") ? fullSet : [currentTaskNum, ...shuffled];
 
         //console.log(`初期タスク順 : ${taskOrder}, ${taskOrder.length}`);
         localStorage.setItem(taskKey, JSON.stringify(taskOrder));
         localStorage.setItem("score", "0");
         localStorage.setItem("taskResults", JSON.stringify([]));
         localStorage.setItem("currentQuestionIndex", "0");
+        if (currentURL.searchParams.has("task")) {
+            currentURL.searchParams.set("tasknum", currentTaskNum);
+            window.location.href = currentURL.toString();
+        }
+    }
+})();*/
+
+(function initializeTaskOrderIfNeeded() {
+    const currentURL = new URL(window.location.href);
+    const task = currentURL.searchParams.get("task");
+    const tasknumParam = currentURL.searchParams.get("tasknum");
+    const taskKey = `taskOrder_${task}`;
+
+    const taskCount = task && task.startsWith("ex-") ? 5 : 40;
+    const fullSet = Array.from({ length: taskCount }, (_, i) => i);
+
+    // taskOrderが未設定なら保存（例題でも本番でも共通）
+    if (!localStorage.getItem(taskKey)) {
+        const currentTaskNum = task && task.startsWith("ex-") ? 0 : Math.floor(Math.random() * 40);
+        const taskOrder = task.startsWith("ex-") ? fullSet : [currentTaskNum, ...fullSet.filter(i => i !== currentTaskNum).sort(() => Math.random() - 0.5)];
+
+        localStorage.setItem(taskKey, JSON.stringify(taskOrder));
+        localStorage.setItem("score", "0");
+        localStorage.setItem("taskResults", JSON.stringify([]));
+        localStorage.setItem("currentQuestionIndex", "0");
+
+        // tasknum を URL にセットしてリロード
+        if (task && !currentURL.searchParams.has("tasknum")) {
+            currentURL.searchParams.set("tasknum", currentTaskNum);
+            window.location.href = currentURL.toString();
+        }
+    }
+
+    // 既にtaskOrderがあり、tasknumがまだないときのみtasknumを追加
+    if (tasknumParam === null && task) {
+        const currentTaskNum = task.startsWith("ex-") ? 0 : Math.floor(Math.random() * 40);
         currentURL.searchParams.set("tasknum", currentTaskNum);
         window.location.href = currentURL.toString();
     }
 })();
 
 document.addEventListener("DOMContentLoaded", function () {
-    updateQuestionCounter(currentQuestionIndex, 40); // 初期表示
+    updateQuestionCounter(currentQuestionIndex, config.task.startsWith("ex-") ? 5 : 40); // 初期表示
 });
 
 // 初期データを `/data` エンドポイントから取得し、描画

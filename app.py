@@ -230,6 +230,11 @@ def load_task_data():
         "size3": "static/data/test/size3.csv",
         "size4": "static/data/test/size4.csv",
         "hierarchical": "static/data/test/hierarchy.csv",
+        "ex-size1": "static/data/test/ex_size1.csv",
+        "ex-size2": "static/data/test/ex_size2.csv",
+        "ex-size3": "static/data/test/ex_size3.csv",
+        "ex-size4": "static/data/test/ex_size4.csv",
+        "ex-hierarchical": "static/data/test/ex_hierarchy.csv",
     }
 
     if task_type not in csv_file_map:
