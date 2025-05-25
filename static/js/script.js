@@ -110,7 +110,6 @@ var labelCriterion = 30; // ラベルを表示するノード
 let offset = 0; // 共通のオフセット値
 let drag_offset = 0; // ドラッグによるオフセット
 let imageMap = {};
-let topDepth = 0; // トップノードの深さ
 
 d3.json("/static/data/image_mapping.json", function(error, data) {
     if (error) {
@@ -392,6 +391,9 @@ const questions = [
     }
 ];
 
+let topDepth = 0; // トップノードの深さ
+let questionStartTime = null;
+
 function updateLabelsForTask(nodes, nodeNames) {
     svg.selectAll("text").remove(); // 全てのラベルを削除
 
@@ -430,8 +432,7 @@ function updateLabelsForTask(nodes, nodeNames) {
         .attr("text-anchor", "middle")
         .each(function(d, i) {
             const textElement = d3.select(this);
-            // ラベルの種類をインデックスに応じて切り替える
-            const labelSymbol = i === 0 ? "★" : "●";
+            const labelSymbol = (String(d.n) === String(nodeNames[0])) ? "★" : "●";
             textElement.attr("font-size", "25px").text(labelSymbol);
         });
 }
@@ -444,6 +445,20 @@ function triggerNextTask() {
     } else {
         console.warn("Next button not found.");
     }
+}
+
+function playBeep(frequency = 600, duration = 150) {
+    const context = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+
+    oscillator.type = "sine"; // ビープらしい音
+    oscillator.frequency.setValueAtTime(frequency, context.currentTime);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+
+    oscillator.start();
+    oscillator.stop(context.currentTime + duration / 1000); // durationはミリ秒
 }
 
 function generateQuestion(nodes, task, node1, node2, depth, ans_num) {
@@ -471,11 +486,16 @@ function generateQuestion(nodes, task, node1, node2, depth, ans_num) {
     }
     if (taskId === "size2") {
         answer = String(ans_num);
-        questionText.textContent = Question.text.replace("{depth}", depth);
-        drawLayerCircles(depth);
+        questionText.textContent = `${Question.text}`;
+        //questionText.textContent = Question.text.replace("{depth}", depth);
+        drawLayerCircles(3);
+        //  正解ノードをラベルで表示
+        if (config.task.startsWith("ex-")) {
+            updateLabelsForTask(nodes, [ans_num]);  // ←★を表示
+        }
     } 
     if (taskId === "size3") {
-        answer = ans_num === 1 ? "1番目" : "それ以外";
+        answer = ans_num === 1 ? "はい" : "いいえ";
         questionText.textContent = `${Question.text}`;
         updateLabelsForTask(nodes, [node1]);
     }
@@ -518,7 +538,20 @@ function generateQuestion(nodes, task, node1, node2, depth, ans_num) {
             radioInput.style.transform = "scale(1.5)"; // ボタンを大きく
             radioInput.style.marginRight = "10px";
             
-            radioInput.addEventListener("click", () => Question.onAnswer(option));
+            radioInput.addEventListener("click", () => {
+                // 回答をvalueに格納
+                Question.onAnswer(option);
+    
+                // 即時に回答確定処理
+                if (!isAnswered && !config.task.startsWith("ex-")) {
+                    const userAnswer = option;
+                    const responseTime = performance.now() - questionStartTime;
+                    handleAnswerSubmission(answer, userAnswer, responseTime);
+                    isAnswered = true;
+                    playBeep(); // ビープ音を鳴らす
+                    triggerNextTask();
+                }
+            });
             radioLabel.appendChild(radioInput);
             radioLabel.appendChild(document.createTextNode(option));
             answerArea.appendChild(radioLabel);
@@ -531,11 +564,29 @@ function generateQuestion(nodes, task, node1, node2, depth, ans_num) {
         answerNote.style.marginTop = "10px";
         answerNote.style.fontSize = "18px";
         answerNote.style.color = "green";
-        answerNote.textContent = `正解: ${answer}`;
+        // ★ or ⚫︎ のラベルで正解を示す
+        let answerLabel = "";
+        if (taskId === "size4") {
+            // 正解のnode番号が node1 と一致すれば ★、そうでなければ ⚫︎
+            answerLabel = (String(ans_num) === String(node1)) ? "★" : "⚫︎";
+        } else if (taskId === "size2") {
+            answerLabel = "★";
+        } else {
+            // その他のタスク（size1, size3）は文字列のまま
+            answerLabel = answer;
+        }
+    
+        answerNote.textContent = `正解: ${answerLabel}`;
         answerArea.appendChild(answerNote);
     }
-    // タイマーで3秒後に次へ進む処理
-    const timeLimit = config.task.startsWith("ex-") ? 10000 : 300;
+
+    window.isAnswered = false;
+    window.questionStartTime = performance.now();  // ミリ秒単位
+    window.correctAnswer = answer;
+     
+    
+    /*// タイマーで3秒後に次へ進む処理
+    const timeLimit = config.task.startsWith("ex-") ? 10000 : 3000;
     const timer = setTimeout(() => {
         if (!isAnswered) { // 未回答の場合のみ処理
             console.log("Time's up! Automatically moving to next task.");
@@ -543,7 +594,7 @@ function generateQuestion(nodes, task, node1, node2, depth, ans_num) {
             isAnswered = true; // 回答済みに設定
             triggerNextTask();
         }
-    }, timeLimit);
+    }, timeLimit);*/
 
     // 「次へ」ボタンのクリック処理
     nextButton.onclick = () => {
@@ -606,7 +657,7 @@ function drawLayerCircles(depth) {
 }
 
 // 回答の正誤判定とスコア計算を行う関数
-function handleAnswerSubmission(correctAnswer, userAnswer) {
+function handleAnswerSubmission(correctAnswer, userAnswer, responseTime) {
     let score = parseInt(localStorage.getItem("score"), 10) || 0;
     let taskResults = JSON.parse(localStorage.getItem("taskResults")) || [];
     let questionIndex = parseInt(localStorage.getItem("currentQuestionIndex"), 10) || 0;
@@ -625,7 +676,8 @@ function handleAnswerSubmission(correctAnswer, userAnswer) {
         question: currentTaskNum,
         userAnswer: userAnswer,
         correctAnswer: correctAnswer,
-        result: isCorrect ? "○" : "×"
+        result: isCorrect ? "○" : "×",
+        time: responseTime !== null ? Math.round(responseTime) : null
     });
     localStorage.setItem("taskResults", JSON.stringify(taskResults));
     
@@ -654,7 +706,7 @@ function displayResults(score, taskResults) {
 
     // サーバーに送信するオブジェクトの構築
     const payload = {
-        bigtree_version: config.bigtree_version || "unknown",
+        bigtree_version: "f1da2135ad55d3d50a3c1593cb27ad8b53d9dc83" || "unknown",
         test_version: config.test_version || "v0",
         date: new Date().toISOString().slice(0, 10), // yyyy-mm-dd
         volunteer: config.name || "unknown",
@@ -663,6 +715,7 @@ function displayResults(score, taskResults) {
             `q${result.question}`, // 質問番号
             result.userAnswer,
             result.result, // 正誤
+            result.time // 回答時間
         ])
     };
 
@@ -969,7 +1022,7 @@ document.getElementById("nextButton").addEventListener("click", function () {
 
     updateQuestionCounter(currentIndex, config.task.startsWith("ex-") ? 5 : 40);
 
-    const totalQuestions = config.task.startsWith("ex-") ? 5 : 40; // 元は40問
+    const totalQuestions = config.task.startsWith("ex-") ? 5 : 21; // 元は40問
     if (nextIndex >= totalQuestions) {
         displayResults(score, taskResults);
         //alert(`終了です。\n合計得点: ${score} / 40`);
@@ -1056,7 +1109,7 @@ if (config.task) {
     const tasknumParam = currentURL.searchParams.get("tasknum");
     const taskKey = `taskOrder_${task}`;
 
-    const taskCount = task && task.startsWith("ex-") ? 5 : 40; // 元は40問
+    const taskCount = task && task.startsWith("ex-") ? 5 : 21; // 元は40問
     const fullSet = Array.from({ length: taskCount }, (_, i) => i);
 
     // taskOrderが未設定なら保存（例題でも本番でも共通）
@@ -1199,9 +1252,9 @@ function drawChart(root) {
         return !nonClickablePaths.data().includes(d);
     });
     
-    clickablePaths.on("click", handleNodeClick)
-                .on("mouseover", mouseover)
-                .on("mouseout", mouseout);
+    clickablePaths.on("click", handleNodeClick);
+                //.on("mouseover", mouseover)
+                //.on("mouseout", mouseout);
 
     // Initialize overviewSvg with initialNodes
     overviewSvg.selectAll("path")
@@ -1814,7 +1867,7 @@ function click(d) {
                                 if (nextNode) {
                                     nextStartAngle = x(nextNode.x);
                                     nextEndAngle = x(nextNode.x + nextNode.dx);
-                                    // ★ offset を考慮して角度を調整
+                                    //  offset を考慮して角度を調整
                                     //nextStartAngle -= offset;
                                     //nextEndAngle -= offset;
                                 }
@@ -1895,7 +1948,7 @@ function getDeepestAncestorAngle(ancestors) {
 }
     
 
-    // ノードのクリック処理
+// ノードのクリック処理
 function handleNodeClick(d) {
     if (config.interaction) {
         // 通常のクリック処理（ズームインなど）
@@ -1905,9 +1958,20 @@ function handleNodeClick(d) {
         const answerInput = document.getElementById("answerInput");
         if (answerInput) {
             answerInput.value = d.n;
+
+            // すでに回答済みでなければ処理実行
+            if (!window.isAnswered && !config.task.startsWith("ex-")) {
+                const userAnswer = d.n.toString();
+                const responseTime = performance.now() - window.questionStartTime;
+                handleAnswerSubmission(window.correctAnswer, userAnswer, responseTime);
+                window.isAnswered = true;
+                playBeep();
+                triggerNextTask();
+            }
         }
     }
 }
+    
 
 // mainSvg の内容を copySvg にコピーする関数
 function copyMainSvgToCopySvg() {
