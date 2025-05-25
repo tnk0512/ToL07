@@ -4,6 +4,8 @@ import copy
 from pathlib import Path
 import random
 import pandas as pd
+import os
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -25,7 +27,7 @@ class TreeOfLife:
         if type(n) == int:
             return self.lives[n]
 
-    def subtree(self, name=None, n=None, depth=2**32, merge_factor=1000): # 2090000 or 1000
+    def subtree(self, name=None, n=None, depth=2**32, merge_factor= 1000): # 2090000 or 1000
         if type(name) == str: life = self.life(name=name)
         elif type(n) == int: life = self.life(n=n)
         else: return
@@ -144,6 +146,7 @@ def render_tree():
     task = request.args.get('task', None)
     tasknum = request.args.get('tasknum', random.randint(0, 39))
     taskMode = depth is not None or task is not None
+    name = request.args.get('name', None)
 
     # サブツリーの初期ノードをランダムに選択
     if depth:
@@ -171,7 +174,8 @@ def render_tree():
         taskMode=taskMode,
         task=task,
         tasknum=tasknum,
-        score=0
+        score=0,
+        name=name,
     )
 
 @app.route('/data', methods=['POST'])
@@ -180,7 +184,7 @@ def get_subtree():
     selected_node = data.get('n', 2429906)  # デフォルト値を設定
     #selected_node = request.args.get('topNode', 2429906)
     depth = 4
-    subtree, leaf_nodes = ToL.subtree(n=2429906, depth=depth)
+    subtree, leaf_nodes = ToL.subtree(n=selected_node, depth=depth)
     # subtree, leaf_nodes = ToL.subtree(name=name, depth=depth)
 
     return jsonify({"life": subtree, "leaf_nodes": leaf_nodes})
@@ -294,6 +298,28 @@ def get_ancestor():
 
     return jsonify({"ancestors": ancestors})
 
+
+@app.route('/submit_results', methods=['POST'])
+def submit_results():
+    data = request.json
+    try:
+        date = data.get("date", datetime.now().strftime("%Y-%m-%d"))
+        volunteer = data.get("volunteer", "anonymous")
+        test = data.get("test", "test")
+        version = data.get("test_version", "v0")
+        
+        save_dir = os.path.join("results", "test", version)
+        os.makedirs(save_dir, exist_ok=True)
+        
+        filename = f"{date}-{volunteer}-{test}.json"
+        filepath = os.path.join(save_dir, filename)
+        
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        
+        return jsonify({"status": "success", "path": filepath}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

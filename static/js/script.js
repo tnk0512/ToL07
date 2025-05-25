@@ -46,7 +46,8 @@ const config = window.graphConfig || {
     topNode: null,
     interaction: true,
     taskMode: false,
-    task: null
+    task: null,
+    name: null
 };
 
 // クリッピングパスを追加して、maxradius以上の領域が表示されないようにする
@@ -87,7 +88,7 @@ var draggableBar = barSvg.append("rect")
     .attr("x", centerX - 10) // 中央に配置
     .attr("y", centerY - maxradius) // 円周上に配置
     .style("cursor", "grab")
-    .style("fill", "grey")
+    .style("fill", "white")
     .attr("transform-origin", "10px 25px"); // 長方形の中心を基準に回転
 
 var tooltip = d3.select("body").append("div").attr("class", "tooltip");
@@ -109,6 +110,7 @@ var labelCriterion = 30; // ラベルを表示するノード
 let offset = 0; // 共通のオフセット値
 let drag_offset = 0; // ドラッグによるオフセット
 let imageMap = {};
+let topDepth = 0; // トップノードの深さ
 
 d3.json("/static/data/image_mapping.json", function(error, data) {
     if (error) {
@@ -216,7 +218,7 @@ function drawCircularIcons(d, nodes, normalizedAngle = 0) {
     let nodeWiki = d3.select("#node-wiki");
     let gridContainer = d3.select("#grid-container");
     const imgData = imageMap[d.n];
-    const iconSize = 60;
+    const iconSize = 90;
     const radiusBase = maxradius + 40;
     const angleThreshold = 8 * (Math.PI / 180);
     const usedAngles = [];
@@ -337,7 +339,7 @@ function updateLabels(nodes, arc) {
         .attr("text-anchor", "middle")
         .attr("font-size", "10px")
         .text(function(d) {
-            return d.is_merged ? d.merge_count : d.n;
+            return d.is_merged ? d.merge_count : d.name;
         });
     }
 
@@ -358,7 +360,7 @@ const questions = [
     {
         id : "size2",
         type: "click",
-        text: "{depth}層目で最も大きい扇形を持つ領域をクリックしてください。",
+        text: "点線で囲まれた中で最も大きい扇形を持つ領域をクリックしてください。",
         onAnswer: (node) => {
             document.getElementById("answerInput").value = node.n;
         }
@@ -366,8 +368,8 @@ const questions = [
     {
         id: "size3",
         type: "select",
-        text: "★は同一層上の扇型の中で、何番目に大きいですか？",
-        options: ["1番目", "それ以外"],
+        text: "★は同一層上の扇型の中で、一番大きいですか？",
+        options: ["はい", "いいえ"],
         onAnswer: (selected) => {
             document.getElementById("answerInput").value = selected;
         }
@@ -383,7 +385,7 @@ const questions = [
     {
         id : "hierarchical",
         type: "click",
-        text: "サブツリー内で、★と⚫︎の共通祖先は存在しますか？存在する場合は共通祖先の中で最も2つのノードに近い層のノードをクリックしてください。",
+        text: "★と⚫︎の最も近い層の共通祖先をクリックしてください。",
         onAnswer: (node) => {
             document.getElementById("answerInput").value = node.n;
         }
@@ -414,7 +416,7 @@ function updateLabelsForTask(nodes, nodeNames) {
                 const centerAngle = Math.atan2(centerY, centerX);
 
                 // ランダムな角度のずれを追加
-                const angleOffset = (Math.random() - 0.5) * 0.6; // ±0.1ラジアンの範囲でずらす
+                const angleOffset = (Math.random() - 0.5) * 0.1; // ±0.1ラジアンの範囲でずらす
                 const randomAngle = centerAngle + angleOffset;
 
                 // 半径はそのまま、角度方向のみ変更して新しい位置を計算
@@ -488,6 +490,7 @@ function generateQuestion(nodes, task, node1, node2, depth, ans_num) {
         updateLabelsForTask(nodes, [node1, node2]);
     }
     console.log(`正解 (${task}):`, answer);
+    console.log(config.name);
 
     // 解答エリアをクリア
     answerArea.innerHTML = "";
@@ -629,10 +632,10 @@ function handleAnswerSubmission(correctAnswer, userAnswer) {
     console.log(`現在の点数: ${score}`);
 }
 
-function displayResults(score, taskResults) {
+/*function displayResults(score, taskResults) {
     // 例題のときはCSVボタンを表示しない
     if (config.task.startsWith("ex-")) {
-        alert(`終了です。\n!!!OKを押さずに!!!、このページを閉じてください。`);
+        alert(`終了です。\nこのページを閉じて本題に進んでください。`);
         return;
     }
     // CSV ダウンロードボタンを追加
@@ -640,8 +643,47 @@ function displayResults(score, taskResults) {
     downloadButton.textContent = "CSVをダウンロード";
     downloadButton.onclick = downloadCSV(taskResults);
     document.body.appendChild(downloadButton);
-    alert(`終了です。\n!!!OKを押さずに!!!、このページを閉じてください。\n合計得点: ${score} / 40`);
+    alert(`終了です。このページを閉じてください。\nGoogleフォームに下記の点数と、感想（あれば）入力してください。\n合計得点: ${score} / 40`);
+}*/
+
+function displayResults(score, taskResults) {
+    if (config.task.startsWith("ex-")) {
+        alert(`終了です。\nこのページを閉じて本題に進んでください。`);
+        return;
+    }
+
+    // サーバーに送信するオブジェクトの構築
+    const payload = {
+        bigtree_version: config.bigtree_version || "unknown",
+        test_version: config.test_version || "v0",
+        date: new Date().toISOString().slice(0, 10), // yyyy-mm-dd
+        volunteer: config.name || "unknown",
+        test: config.task,
+        results: taskResults.map(result => [
+            `q${result.question}`, // 質問番号
+            result.userAnswer,
+            result.result, // 正誤
+        ])
+    };
+
+    fetch("/submit_results", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    })
+    .then(response => {
+        if (response.ok) {
+            alert(`終了です。結果を送信しました。ページを閉じてください。\n合計得点: ${score} / 40`);
+        } else {
+            alert("結果の送信に失敗しました。");
+        }
+    })
+    .catch(error => {
+        console.error("送信エラー:", error);
+        alert("通信エラーが発生しました。");
+    });
 }
+
 
 
 
@@ -656,13 +698,113 @@ function downloadCSV(taskResults) {
     let blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     let link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `test_${config.task}.csv`;
+    link.download = `${config.name}_${config.task}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 }
 
 function initializeforTask(task) {
+    fetch(`/load_task_data?task=${task}`)
+        .then(response => response.json())
+        .then(taskData => {
+            if (taskData.length === 0) {
+                console.error("No task data available for this task type.");
+                return;
+            }
+
+            const taskNum = config.tasknum;
+            const randomTask = taskData[taskNum];
+            const { Top, node1, node2, depth, Answer, colorChange } = randomTask;
+
+            config.topNode = Top;
+            config.colorChange = colorChange > 0;
+
+            // offsetをランダムに設定
+            offset = Math.random() * 2 * Math.PI;
+            // Biotaの総value（固定値）
+            const totalTreeValue = 2086658;
+            topDepth = depth;
+
+            fetch('/data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ n: config.topNode })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const subtree = data.life;
+                const nodes = partition.nodes(subtree);
+
+                svg.selectAll("path").remove();
+                svg.selectAll("text").remove();
+                x.range([0, 2 * Math.PI]);
+                y.range([0, maxradius]);
+
+                // ✅ offsetを反映したarcを定義
+                arc = d3.svg.arc()
+                    .startAngle(d => x(d.x) + offset)
+                    .endAngle(d => x(d.x + d.dx) + offset)
+                    .innerRadius(d => y(d.y))
+                    .outerRadius(d => y(d.y + d.dy));
+
+                // 擬似配色用の角度範囲を計算
+                const currentNode = nodes.find(d => d.n === config.topNode);
+                if (!currentNode) {
+                    console.error(`Node with n=${config.topNode} not found in subtree.`);
+                    return;
+                }
+                const topValue = currentNode.value;
+                const angleWidth = 2 * Math.PI * (topValue / totalTreeValue);
+                const randomStart = Math.random() * (2 * Math.PI - angleWidth); // 開始位置（ランダム）
+                const pseudoStartAngle = randomStart;
+                const pseudoEndAngle = randomStart + angleWidth;
+
+                const path = svg.selectAll("path")
+                    .data(nodes)
+                    .enter().append("path")
+                    .attr("d", arc)
+                    .attr("data-id", d => d.n)
+                    .style("fill", d => config.colorChange ? fillColor(d) : computeNodeColor(d, topDepth+d.depth, pseudoStartAngle, pseudoEndAngle))
+                    .style("opacity", d => d.is_merged ? 0.3 : 1);
+
+                // ノードクリックイベント
+                const clickablePaths = path.filter(d => {
+                    const r = y(d.y + d.dy / 2);
+                    const theta = x(d.x + d.dx) - x(d.x);
+                    return r * theta >= sizeCriterion || d === d.parent;
+                });
+                clickablePaths.on("click", handleNodeClick);
+
+                // overviewの描画
+                overviewX = d3.scale.linear().range([0, 2 * Math.PI]);
+                overviewY = d3.scale.linear().range([0, overmaxradius * 5 / (maxdepth + 1)]);
+
+                const overviewArc = d3.svg.arc()
+                    .startAngle(d => Math.PI / 2 - overviewX(d.x))
+                    .endAngle(d => Math.PI / 2 - overviewX(d.x + d.dx))
+                    .innerRadius(d => overviewY(d.y))
+                    .outerRadius(d => overviewY(d.y + d.dy));
+
+                const overviewSvg = d3.select("#overview").select("svg").select("g");
+                overviewSvg.selectAll("path").remove();
+                overviewSvg.selectAll("path")
+                    .data(nodes)
+                    .enter().append("path")
+                    .attr("d", overviewArc)
+                    .style("fill", d => {
+                        const mainPath = svg.select(`path[data-id="${d.n}"]`);
+                        return !mainPath.empty() ? mainPath.style("fill") : "#ccc";
+                    });
+
+                updateNodeCount(nodes);
+                generateQuestion(nodes, config.task, node1, node2, depth, Answer);
+            })
+            .catch(error => console.error("Error fetching /data:", error));
+        });
+}
+
+/*function initializeforTask(task) {
     // タスクデータを取得
     fetch(`/load_task_data?task=${task}`)
         .then(response => response.json())
@@ -687,6 +829,7 @@ function initializeforTask(task) {
             svg.selectAll("path").each(function(d) {
                 if (d.n === config.topNode) {
                     currentNode = d; // 該当ノードを取得
+
                 }
             });
         
@@ -791,7 +934,7 @@ function initializeforTask(task) {
             })
             .catch(error => console.error("Error fetching subtree:", error));
         });
-}
+}*/
 
 // 問題カウント
 // 現在の問題番号をローカルストレージから取得（初期値は0）
@@ -826,7 +969,7 @@ document.getElementById("nextButton").addEventListener("click", function () {
 
     updateQuestionCounter(currentIndex, config.task.startsWith("ex-") ? 5 : 40);
 
-    const totalQuestions = config.task.startsWith("ex-") ? 5 : 40;
+    const totalQuestions = config.task.startsWith("ex-") ? 5 : 40; // 元は40問
     if (nextIndex >= totalQuestions) {
         displayResults(score, taskResults);
         //alert(`終了です。\n合計得点: ${score} / 40`);
@@ -834,6 +977,7 @@ document.getElementById("nextButton").addEventListener("click", function () {
         localStorage.removeItem(`taskOrder_${config.task}`);
         localStorage.removeItem("score");
         localStorage.removeItem("taskResults");
+        localStorage.removeItem("taskkey");
         return;
     }
 
@@ -844,7 +988,7 @@ document.getElementById("nextButton").addEventListener("click", function () {
     /*//  5秒のラグを挿入
     setTimeout(() => {
         window.location.href = currentURL.toString();
-    }, 5000);*/
+    }, 5000); // 5秒後にリダイレクト*/
 });
 
 // 3. 2. 1のカウントダウンを表示してからタスクを開始する関数
@@ -905,19 +1049,22 @@ function showCountdownThenStart(task) {
     }
 })();*/
 
+if (config.task) {
 (function initializeTaskOrderIfNeeded() {
     const currentURL = new URL(window.location.href);
     const task = currentURL.searchParams.get("task");
     const tasknumParam = currentURL.searchParams.get("tasknum");
     const taskKey = `taskOrder_${task}`;
 
-    const taskCount = task && task.startsWith("ex-") ? 5 : 40;
+    const taskCount = task && task.startsWith("ex-") ? 5 : 40; // 元は40問
     const fullSet = Array.from({ length: taskCount }, (_, i) => i);
 
     // taskOrderが未設定なら保存（例題でも本番でも共通）
-    if (!localStorage.getItem(taskKey)) {
+    if (tasknumParam === null) {
         const currentTaskNum = task && task.startsWith("ex-") ? 0 : Math.floor(Math.random() * 40);
+        //const currentTaskNum = task && task.startsWith("ex-") ? 0 : config.tasknum;
         const taskOrder = task.startsWith("ex-") ? fullSet : [currentTaskNum, ...fullSet.filter(i => i !== currentTaskNum).sort(() => Math.random() - 0.5)];
+        //const taskOrder = fullSet
 
         localStorage.setItem(taskKey, JSON.stringify(taskOrder));
         localStorage.setItem("score", "0");
@@ -926,21 +1073,23 @@ function showCountdownThenStart(task) {
 
         // tasknum を URL にセットしてリロード
         if (task && !currentURL.searchParams.has("tasknum")) {
-            currentURL.searchParams.set("tasknum", currentTaskNum);
+            currentURL.searchParams.set("tasknum", taskOrder[0]);
             window.location.href = currentURL.toString();
         }
     }
 
-    // 既にtaskOrderがあり、tasknumがまだないときのみtasknumを追加
+    /*// 既にtaskOrderがあり、tasknumがまだないときのみtasknumを追加
     if (tasknumParam === null && task) {
         const currentTaskNum = task.startsWith("ex-") ? 0 : Math.floor(Math.random() * 40);
         currentURL.searchParams.set("tasknum", currentTaskNum);
         window.location.href = currentURL.toString();
-    }
-})();
+    }*/
+})();}
 
 document.addEventListener("DOMContentLoaded", function () {
+    if (config.task) {
     updateQuestionCounter(currentQuestionIndex, config.task.startsWith("ex-") ? 5 : 40); // 初期表示
+    }
 });
 
 // 初期データを `/data` エンドポイントから取得し、描画
@@ -1100,6 +1249,11 @@ function computeNodeColor(d, depth, startAngle, endAngle) {
     let normalizedAngle = d.x + d.dx / 2;
     //let angle = normalizedAngle * (overendAngle - overstartAngle) + overstartAngle;
     let angle = normalizedAngle * (endAngle - startAngle) + startAngle;
+    //  depthが4のときだけノイズを加える
+    if (depth - topDepth === 3) {
+        const epsilon = (Math.random() - 0.5) * 0.2;  // ±1度程度のノイズ（ラジアン）
+        angle += epsilon;
+    }
     let [L, a, b] = polarToCIELab(distance, angle, maxradius);
     return LabToHex(L, a, b);
 }
@@ -1598,7 +1752,6 @@ function click(d) {
             x.range([startAngle-opposingAngle, endAngle-opposingAngle]);
             y.range([maxradius/5, maxradius*6/5]);
             previousTopNode = d;
-        
             // 遷移スピードEase-InOutで設定
             function sigmoidEase(t) {
                 const a = 3/4;
@@ -1606,8 +1759,7 @@ function click(d) {
                 let sig = 1 / (1 + Math.exp(-a * k * (t - 0.5))); // シグモイド関数
                 const maxSig = 1 / (1 + Math.exp(-a * 4)); // sigmoid(4) の値
                 const minSig = 1 / (1 + Math.exp(a * 4));
-                //return (sig - minSig) / (maxSig - minSig); // [0, 1] にスケーリング
-                return (sig - minSig) / (maxSig - minSig);
+                return (sig - minSig) / (maxSig - minSig); // [0, 1] にスケーリング
             }
         
             // Copy SVG の表示と透明度のアニメーション
