@@ -1,3 +1,121 @@
+# Sunburst Tree Visualization System for Phylogenetic Trees
+
+This project is a system for visualizing large-scale hierarchical data using Sunburst charts. It provides an intuitive representation of data structures and enables interactive operations that allow users to easily access details at each hierarchical level. The system is designed to effectively display and manipulate tree-structured data.<br>
+
+*Note: The phylogenetic tree dataset is extremely large (700MB), so it is not included in this repository. Instead, a smaller sample dataset with the same structure (`simple_withValue.json`) is provided.*
+
+## Overview
+
+This research aims to visualize massive tree structures and proposes a novel method using dynamic coloring techniques. Conventional static coloring methods for trees attempt to clearly visualize tree structures; however, in large-scale trees, distinguishing colors between adjacent nodes becomes difficult. This work addresses the problem by dynamically applying similar coloring schemes to locally displayed portions of the tree structure. By incorporating smooth animations that continuously change both node positions and colors during zoom operations, the system reduces the psychological burden caused by node recoloring. The proposed method is applicable to large-scale tree structures in general. Its effectiveness was demonstrated using a biological taxonomy tree consisting of two million nodes through performance measurements and user studies.
+
+## Features
+
+### Limiting the Number of Displayed Layers
+
+When the dataset becomes extremely large, displaying all hierarchical levels at once is difficult both visually and computationally. Therefore, this system limits the number of displayed layers and renders only the specified hierarchy range. This allows users to focus on the most important information.
+
+* **Maximum Display Depth**: Can be set to any value. By default, up to five layers from the root are displayed.
+* **Configuration Method**: The number of displayed layers can be modified directly in the code, allowing flexible adaptation to specific business requirements.
+
+### Merging and Simplifying Adjacent Small Nodes
+
+This system includes a feature that automatically merges adjacent small nodes on the Sunburst chart to simplify the visualization. This makes the Sunburst chart easier to understand and helps users focus on important information. In addition to reducing visual clutter, this feature also improves performance by reducing data size and processing time.
+
+* **Effects of Merging and Simplification**:
+  By combining small nodes, the overall Sunburst chart becomes more concise and rendering is optimized. Especially when handling large datasets or deep hierarchies, the improvements in rendering speed and data reduction become significant.
+
+* **Performance Improvements**:
+  By simplifying adjacent small nodes, the following improvements were observed when clicking a node.
+
+  |                 | Before Simplification | After Simplification |
+  | --------------- | --------------------- | -------------------- |
+  | Number of Nodes | 7618                  | 497                  |
+  | Data Size       | 1.67MB                | 1.09MB               |
+  | Rendering Time  | 293ms                 | 73ms                 |
+
+This simplification feature not only reduces data size but also improves rendering speed, significantly enhancing the user experience.
+
+### Transition After Clicking
+
+When a user clicks a node, the subtree rooted at that node is displayed as a new Sunburst chart, creating a zoom-in effect. The transition mechanism has the following characteristics:
+
+* **Sequential Transition**:
+  Clicking a node performs hierarchical transitions step by step. For example, when clicking node `1.2.1`, the system first zooms into its parent node `1.2`, then updates the subtree and zooms into `1.2.1`. This process makes hierarchical navigation intuitive.
+
+* **Dynamic Color Changes**:
+  As node transitions progress, node colors also change dynamically. By utilizing a wide color space, nodes become easier to distinguish.
+
+* **Overview Update**:
+  Based on the depth and angle of the clicked node, the overview (the entire Sunburst chart) is also updated.
+
+* **User-Controlled Graph Rotation**:
+  A draggable bar is placed outside the Sunburst chart, allowing users to rotate the chart freely and inspect it from any angle.
+
+* **Center Angle Adjustment for Transitions**:
+  The transition center is automatically adjusted so that the clicked node appears at the center of the screen. This makes transitions between nodes visually easier to understand.
+
+#### Figure 1: Dynamic Color Transitions
+
+![Dynamic Color Transitions](static/images/color_transition.jpg/)<br>
+
+### Search Function
+
+The system provides a search function that allows users to search for nodes by name. Users can search for a specific node and zoom into it within the Sunburst chart.
+
+* **Search Execution**:
+  When a node name is entered, the system locates the node and focuses the visualization on it.
+
+* **Highlighting**:
+  Search results are highlighted so users can easily identify the corresponding node.
+
+#### Figure 2: Searching for Clypeata
+
+![Clypeata Search](static/images/search_clypeata.jpg/)
+
+# Description of TreeOfLife Class Methods
+
+The `TreeOfLife` class is used to manipulate tree-structured data. This class includes the `life` method for retrieving information about a specific node (organism), the `subtree` method for retrieving a subtree, and the `subtrees` method for retrieving multiple subtrees.
+
+## Class Variables
+
+* `lives`: A list of all nodes (organisms) in the tree structure.
+* `index`: A mapping table between node IDs and indices.
+* `lookup`: A mapping table between scientific names and node indices.
+* `orphans`: A list of orphan nodes whose parent IDs do not exist.
+
+## `life` Method
+
+The `life` method retrieves information about a specific organism (node).
+
+### Arguments
+
+* `name`: Scientific name (optional).
+* `n`: Node index (optional).
+
+### Processing
+
+* If `name` is a string, the corresponding index is retrieved from `lookup`.
+* If `n` is an integer, the corresponding node information is retrieved from `lives` and returned.
+
+## `subtree` Method
+
+The `subtree` method retrieves a subtree rooted at a specified node.
+
+### Arguments
+
+* `name`: Scientific name (optional).
+* `n`: Node index (optional).
+* `depth`: Depth of the subtree (unlimited by default).
+
+### Processing
+
+* If `name` is a string, the corresponding node is retrieved using the `life` method.
+* If `n` is an integer, the corresponding node is retrieved using the `life` method.
+* Child nodes are recursively retrieved up to the specified depth to construct the subtree.
+* Leaf nodes (nodes at depth 0) are treated as having no child nodes.
+* The method returns the subtree and a list of leaf nodes.
+
+
 # 系統樹のサンバースト図描画システム
 
 このプロジェクトは、大規模な階層データをサンバースト図で視覚化するシステムである。データ構造を分かりやすく表示し、ユーザーが階層ごとの詳細にアクセスしやすいインタラクティブな操作を可能とする。本システムは、ツリー構造データを効果的に表示・操作することを目的としている。<br>
