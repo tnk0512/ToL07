@@ -19,7 +19,17 @@ This study introduces BloomTree, an interactive Sunburst system for visualizing 
 
 A video demonstrating the navigation process from **Biota** (root) to **Homo sapiens** (leaf) is shown below.<br>
 
-<img src="./evis_demo.gif" style="width: 150%; max-width: 1000px;">
+<div style="display: flex; justify-content: center; margin: 20px 0;">
+  <iframe
+    width="960"
+    height="540"
+    src="https://www.youtube.com/embed/RiSBN4bAo7s"
+    title="BloomTree Demo Video"
+    frameborder="0"
+    allowfullscreen>
+  </iframe>
+</div>
+
 
 - Clicking the 4th layer starts a four-step animation.
 
